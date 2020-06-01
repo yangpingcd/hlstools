@@ -1,0 +1,313 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>HLS Player Stats</title>
+
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <link rel="stylesheet" type="text/css" href="PlayerStats.css">
+
+    <script src="jquery.js"></script>
+    <script>
+        // http://www.jquerybyexample.net/2012/06/get-url-parameters-using-jquery.html
+        function getURLParameter(sParam) {
+            var sPageURL = decodeURIComponent(window.location.search.substring(1));
+            var sURLVariables = sPageURL.split('&');
+            for (var i = 0; i < sURLVariables.length; i++) {
+                var sParameterName = sURLVariables[i].split('=');
+                if (sParameterName[0] == sParam) {
+                    return sParameterName[1];
+                }
+            }
+        }
+    </script>
+
+    <script>
+        class Stats {
+            constructor(id) {
+                this.id = id;
+
+                this.lastUrl = "";
+                this.statusCodes = {};
+                this.responseTimes = [];
+            }
+
+            updateStats(status, responseTime) {
+                var key = '' + status; // convert to string
+
+                if (this.statusCodes[key]) {
+                    this.statusCodes[key]++;
+                } else {
+                    this.statusCodes[key] = 1;
+                }
+
+                this.responseTimes.push(responseTime);
+                while (this.responseTimes.length > 1000) {
+                    this.responseTimes.shift();
+                }
+            }
+
+            responseTimeMin() {
+                return Math.min.apply(Math, this.responseTimes);
+            }
+            responseTimeMax() {
+                return Math.max.apply(Math, this.responseTimes);
+            }
+            responseTimeAvg() {
+                var sum = this.responseTimes.reduce((total, cur) => total + cur, 0);
+                return Math.floor(sum / this.responseTimes.length);
+            }
+            responseTimeAvgLast10() {
+                var last10 = this.responseTimes.slice(-10);
+                var sum = last10.reduce((total, cur) => total + cur, 0);
+                return Math.floor(sum / last10.length);
+            }
+            responseTimeAvgLast100() {
+                var last100 = this.responseTimes.slice(-100);
+                var sum = last100.reduce((total, cur) => total + cur, 0);
+                return Math.floor(sum / last100.length);
+            }
+        }
+
+        var playlistStats = new Stats('#tabPlaylistStats tbody');
+        var chunklistStats = new Stats('#tabChunklistStats tbody');
+        var chunkStats = new Stats('#tabChunkStats tbody');
+        var lastChunk;
+        var playing = false;
+    </script>
+
+    <script>
+        function getChunk(url) {
+            var startTime = (new Date()).getTime();
+
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState == 4) {
+                    var endTime = (new Date()).getTime();
+                    var responseTime = endTime - startTime;
+
+                    chunkStats.lastURL = url;
+                    chunkStats.updateStats(xhr.status, responseTime);
+                    displayResult(chunkStats, '#tabChunkStats tbody');
+                }
+            };
+            xhr.open("GET", url, true);
+            xhr.send();
+        }
+
+        function getChunklist(url) {
+            var startTime = (new Date()).getTime();
+
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState == 4) {
+                    var endTime = (new Date()).getTime();
+                    var responseTime = endTime - startTime;
+
+                    if (xhr.status == 200) {
+                        var chunks = [];
+
+                        var myRegexp = /#EXTINF.*\r?\n(.*)/g;
+                        var m = myRegexp.exec(xhr.responseText);
+                        while (m) {
+                            if (m[1] && m[1].indexOf("#") == -1) { // not empty and not starts with #
+                                chunks.push(m[1]);
+                            }
+                            m = myRegexp.exec(xhr.responseText);
+                        }
+
+                        if (chunks.length > 0) {
+                            var lastChunkIndex = chunks.indexOf(lastChunk);
+
+                            var playingChunk;
+                            if (lastChunkIndex >= 0 && lastChunkIndex < chunks.length - 1) {
+                                playingChunk = chunks[lastChunkIndex + 1];
+                            } else {
+                                playingChunk = chunks[chunks.length - 1];
+                            }
+
+                            if (playingChunk != lastChunk) {
+                                lastChunk = playingChunk;
+
+                                var pos = url.lastIndexOf("/");
+                                var chunkUrl = url.substring(0, pos + 1) + lastChunk;
+                                getChunk(chunkUrl);
+                            }
+                        }
+                    }
+
+                    chunklistStats.lastURL = url;
+                    chunklistStats.updateStats(xhr.status, responseTime);
+                    displayResult(chunklistStats, '#tabChunklistStats tbody');
+
+                    if (playing) {
+                        setTimeout(getChunklist, 8000, url);
+                    }
+                }
+            };
+            xhr.open("GET", url, true);
+            xhr.send();
+        }
+
+
+        function getPlaylist(url) {
+            var startTime = (new Date()).getTime();
+
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState == 4) {
+                    var endTime = (new Date()).getTime();
+                    var responseTime = endTime - startTime;
+
+                    if (xhr.status >= 200 && xhr.status < 400) {
+                        var myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
+                        var m = myRegexp.exec(xhr.responseText);
+                        if (m && m[1]) {
+                            var pos = url.lastIndexOf("/");
+                            var chunklistUrl = (pos > 0 ? url.substring(0, pos + 1) + m[1] : m[1]);
+                            getChunklist(chunklistUrl);
+                        }
+                    }
+
+                    playlistStats.lastURL = url;
+                    playlistStats.updateStats(xhr.status, responseTime);
+                    displayResult(playlistStats, '#tabPlaylistStats tbody');
+                }
+            };
+            xhr.open("GET", url, true);
+            xhr.send();
+        }
+
+        $(function () {
+            var txtStreamUrl = getURLParameter('url');
+            if (txtStreamUrl) {
+                $('#url').val(txtStreamUrl);
+            }
+
+            clearStats();
+
+            var testUrl = document.getElementById('test-url');
+            testUrl.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                var url = document.getElementById('url');
+                var btnStart = document.getElementById("btnStart");
+                if (btnStart.textContent == "Start") {
+                    getPlaylist(url.value);
+
+                    url.readOnly = true;
+                    btnStart.textContent = "Stop";
+                    playing = true;
+                } else {
+                    // todo: stop
+                    url.readOnly = false;
+                    btnStart.textContent = "Start";
+                    playing = false;
+                }
+
+                return false;
+            });
+        });
+
+    </script>
+
+    <script>
+        function displayResult(stats, id) {
+            var tbody = $(id).empty();
+            var even = true;
+            var addRow = function (name, value) {
+                tbody.append(
+                    $('<tr></tr>').addClass(even ? 'd0' : 'd1').append(
+                        '<td>' + name + '</td>' + '<td>' + value + '</td>')
+                );
+                even = !even;
+            }
+
+            if (stats.lastURL) {
+                addRow("Last URL", stats.lastURL);
+            }
+
+            for (var key in stats.statusCodes) {
+                var value = stats.statusCodes[key];
+                addRow("StatusCode " + key, value);
+            }
+
+            if (stats.responseTimes && stats.responseTimes.length > 0) {
+                addRow('Response Time Last (ms)', stats.responseTimes[stats.responseTimes.length - 1]);
+                addRow('Response Time Min (ms)', stats.responseTimeMin());
+                addRow('Response Time Max (ms)', stats.responseTimeMax());
+                //addRow('Response Time Avg (ms)', stats.responseTimeAvg());
+                addRow('Response Time Avg (Last 10) (ms)', stats.responseTimeAvgLast10());
+                addRow('Response Time Avg (Last 100) (ms)', stats.responseTimeAvgLast100());
+            }
+        }
+
+        function clearStats() {
+            playlistStats = new Stats();
+            chunklistStats = new Stats();
+            chunkStats = new Stats();
+            lastChunk = void 0; // lastChunk is undefined
+
+            displayResult(playlistStats, '#tabPlaylistStats tbody');
+            displayResult(chunklistStats, '#tabChunklistStats tbody');
+            displayResult(chunkStats, '#tabChunkStats tbody');
+        }
+    </script>
+</head>
+<body>
+    <form id="test-url">
+        <div style="width:100%">
+            <label>Stream URL:</label>
+            <input style="width: 80%" id="url" type="url" value="http://sg002-live.sliq.net/00309-live/matrix1/Playlist.m3u8">
+        </div>
+        <div>
+            <label></label>
+            <button id="btnStart" type=submit>Start</button>
+        </div>
+    </form>
+
+    <hr>
+    <div>
+        <button id="btnClear" onclick="clearStats();">Clear</button>
+    </div>
+
+    <div id="divPlaylistStats">
+        <div> Playlist Stats</div>
+        <table id="tabPlaylistStats">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div id="divChunklistStats">
+        <div> Chunklist Stats</div>
+        <table id="tabChunklistStats">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div id="divChunkStats">
+        <div> Chunk Stats</div>
+        <table id="tabChunkStats">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</body>
+</html>
