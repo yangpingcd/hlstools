@@ -7,9 +7,7 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="stylesheet" type="text/css" href="PlayerStats.css">
 
-    <!-- <script src="jquery.js"></script> -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    
+    <script src="jquery.js"></script>
     <script>
         // http://www.jquerybyexample.net/2012/06/get-url-parameters-using-jquery.html
         function getURLParameter(sParam) {
@@ -254,6 +252,30 @@
             displayResult(chunklistStats, '#tabChunklistStats tbody');
             displayResult(chunkStats, '#tabChunkStats tbody');
         }
+
+        function downloadCsv1() {
+            var filename = 'data_' + (new Date()).getTime() + '.csv';
+
+            var bArr = ["50", "51", "52"];            
+            //var blob = new Blob([new Uint8Array(bArr)], { type: 'text/csv;charset=UTF-16LE;' });
+            var blob = new Blob(["abc", "def"], { type: 'text/csv;charset=utf-16;' });
+
+            if (navigator.msSaveBlob) {
+                navigator.msSaveBlob(blob, filename);
+            } else {
+                var link = document.createElement("a");
+                if (link.download !== undefined) {
+                    var url = window.URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", filename);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                }
+            }
+        }
     </script>
 </head>
 <body>
@@ -271,6 +293,7 @@
     <hr>
     <div>
         <button id="btnClear" onclick="clearStats();">Clear</button>
+        <button id="btnDownloadCsv1" onclick="downloadCsv1();">Download CSV</button>
     </div>
 
     <div id="divPlaylistStats">
