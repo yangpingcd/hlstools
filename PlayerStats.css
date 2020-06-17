@@ -1,12 +1,12 @@
-﻿div {
+﻿/*div {
     padding: 2px 2px;
-}
+}*/
 
-label {
+/* label {
     display: inline-block;
     width: 100px;
     text-align: right;
-}
+} */
 
 table {
     border: 1px solid black;

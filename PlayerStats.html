@@ -1,13 +1,18 @@
 ﻿<!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8" />
     <title>HLS Player Stats</title>
 
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+    <link rel="stylesheet" type="text/css" href="lib/bootstrap/bootstrap.css">
     <link rel="stylesheet" type="text/css" href="PlayerStats.css">
 
-    <script src="jquery.js"></script>
+    <script src="lib/jquery/jquery.js"></script>
+    <script src="lib/bootstrap/bootstrap.js"></script>
+
     <script>
         // http://www.jquerybyexample.net/2012/06/get-url-parameters-using-jquery.html
         function getURLParameter(sParam) {
@@ -23,13 +28,32 @@
     </script>
 
     <script>
+        class StatsItem {
+            constructor(startTime, url, statusCode, size, responseTime) {
+                this.startTime = startTime;
+                this.url = url;
+                this.statusCode = statusCode;
+                this.size = size;
+                this.responseTime = responseTime;
+            }
+        }
+
         class Stats {
             constructor(id) {
                 this.id = id;
 
-                this.lastUrl = "";
                 this.statusCodes = {};
                 this.responseTimes = [];
+
+                // array of StatsItem
+                this.statsItems = [];
+            }
+
+            lastURL() {
+                if (this.statsItems && this.statsItems.length > 0) {
+                    return this.statsItems[this.statsItems.length - 1].url;
+                }
+                return "";
             }
 
             updateStats(status, responseTime) {
@@ -78,15 +102,21 @@
 
     <script>
         function getChunk(url) {
-            var startTime = (new Date()).getTime();
+            let startTime = (new Date()).getTime();
 
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function () {
                 if (xhr.readyState == 4) {
-                    var endTime = (new Date()).getTime();
-                    var responseTime = endTime - startTime;
+                    let endTime = (new Date()).getTime();
+                    let responseTime = endTime - startTime;
 
-                    chunkStats.lastURL = url;
+                    let size = 0;
+                    if (xhr.response && xhr.response.length)
+                        size = xhr.response.length;
+                    let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
+                    chunkStats.statsItems.push(item);
+
+                    //chunkStats.lastURL = url;
                     chunkStats.updateStats(xhr.status, responseTime);
                     displayResult(chunkStats, '#tabChunkStats tbody');
                 }
@@ -96,13 +126,13 @@
         }
 
         function getChunklist(url) {
-            var startTime = (new Date()).getTime();
+            let startTime = (new Date()).getTime();
 
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function () {
                 if (xhr.readyState == 4) {
-                    var endTime = (new Date()).getTime();
-                    var responseTime = endTime - startTime;
+                    let endTime = (new Date()).getTime();
+                    let responseTime = endTime - startTime;
 
                     if (xhr.status == 200) {
                         var chunks = [];
@@ -136,7 +166,13 @@
                         }
                     }
 
-                    chunklistStats.lastURL = url;
+                    let size = 0;
+                    if (xhr.response && xhr.response.length)
+                        size = xhr.response.length;
+                    let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
+                    chunklistStats.statsItems.push(item);
+
+                    //chunklistStats.lastURL = url;
                     chunklistStats.updateStats(xhr.status, responseTime);
                     displayResult(chunklistStats, '#tabChunklistStats tbody');
 
@@ -151,13 +187,13 @@
 
 
         function getPlaylist(url) {
-            var startTime = (new Date()).getTime();
+            let startTime = (new Date()).getTime();
 
             var xhr = new XMLHttpRequest();
             xhr.onreadystatechange = function () {
                 if (xhr.readyState == 4) {
-                    var endTime = (new Date()).getTime();
-                    var responseTime = endTime - startTime;
+                    let endTime = (new Date()).getTime();
+                    let responseTime = endTime - startTime;
 
                     if (xhr.status >= 200 && xhr.status < 400) {
                         var myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
@@ -169,7 +205,14 @@
                         }
                     }
 
-                    playlistStats.lastURL = url;
+
+                    let size = 0;
+                    if (xhr.response && xhr.response.length)
+                        size = xhr.response.length;
+                    let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
+                    playlistStats.statsItems.push(item);
+
+                    //playlistStats.lastURL = url;
                     playlistStats.updateStats(xhr.status, responseTime);
                     displayResult(playlistStats, '#tabPlaylistStats tbody');
                 }
@@ -186,7 +229,9 @@
 
             clearStats();
 
-            var testUrl = document.getElementById('test-url');
+
+
+            /*var testUrl = document.getElementById('test-url');
             testUrl.addEventListener('submit', function (event) {
                 event.preventDefault();
 
@@ -206,8 +251,25 @@
                 }
 
                 return false;
-            });
+            });*/
         });
+
+        function btnStart_onclick() {
+            var url = $('#url');
+            var btnStart = $('#btnStart');
+
+            if (btnStart.text() == 'Start') {
+                getPlaylist(url.val());
+                url.prop('readonly', true);
+                btnStart.text('Stop');
+                playing = true;
+            } else {
+                // todo: stop
+                url.prop('readonly', false);
+                btnStart.text('Start');
+                playing = false;
+            }
+        }
 
     </script>
 
@@ -217,14 +279,14 @@
             var even = true;
             var addRow = function (name, value) {
                 tbody.append(
-                    $('<tr></tr>').addClass(even ? 'd0' : 'd1').append(
+                    $('<tr></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
                         '<td>' + name + '</td>' + '<td>' + value + '</td>')
                 );
                 even = !even;
             }
 
-            if (stats.lastURL) {
-                addRow("Last URL", stats.lastURL);
+            if (stats.lastURL()) {
+                addRow("Last URL", stats.lastURL());
             }
 
             for (var key in stats.statusCodes) {
@@ -253,12 +315,9 @@
             displayResult(chunkStats, '#tabChunkStats tbody');
         }
 
-        function downloadCsv1() {
-            var filename = 'data_' + (new Date()).getTime() + '.csv';
-
-            var bArr = ["50", "51", "52"];            
+        function downloadCsv(csv, filename) {
             //var blob = new Blob([new Uint8Array(bArr)], { type: 'text/csv;charset=UTF-16LE;' });
-            var blob = new Blob(["abc", "def"], { type: 'text/csv;charset=utf-16;' });
+            var blob = new Blob([csv], { type: 'text/csv;charset=utf-16;' });
 
             if (navigator.msSaveBlob) {
                 navigator.msSaveBlob(blob, filename);
@@ -276,29 +335,211 @@
                 }
             }
         }
+
+        function formatDate(d) {
+            return d.getFullYear() +
+                ("0" + (d.getMonth() + 1)).slice(-2) +
+                ("0" + d.getDate()).slice(-2) + "-" +
+                ("0" + d.getHours()).slice(-2) +
+                ("0" + d.getMinutes()).slice(-2) +
+                ("0" + d.getSeconds()).slice(-2);
+        }
+
+        function btnCsvCode_onclick() {
+            let csv = "type,statusCode,count\n";
+
+            statsToCsv = function (stats, type) {
+                let csv = "";
+                for (var key in stats.statusCodes) {
+                    var value = stats.statusCodes[key];
+                    csv += "" + type + "," + key + "," + value + "\n"
+                }
+                return csv;
+            }
+
+            csv += statsToCsv(playlistStats, "playlist");
+            csv += statsToCsv(chunklistStats, "chunklist");
+            csv += statsToCsv(chunkStats, "chunk");
+
+            let filename = 'code_' + formatDate(new Date()) + '.csv';
+
+            downloadCsv(csv, filename);
+        }
+
+        function btnCsvResponseTime_onclick() {
+            let csv = "type,range,count\n";
+
+            statsToCsv = function (stats, type) {
+                let csv = "";
+
+                let i = 0;
+                let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
+                let counts = []; // ranges.length+1
+                for (i = 0; i <= ranges.length; i++) {
+                    counts[i] = 0;
+                }
+
+                if (stats.responseTimes && stats.responseTimes.length > 0) {
+                    stats.responseTimes.forEach(value => {
+                        for (i = 0; i < ranges.length; i++) {
+                            if (value < ranges[i]) {
+                                counts[i]++;
+                                return;
+                            }
+                        }
+                        // last
+                        counts[counts.length - 1]++;
+                    });
+                }
+
+                for (i = 0; i < ranges.length; i++) {
+                    let prev = (i == 0 ? 0 : ranges[i - 1]);
+                    csv += "" + type + "," + prev + "-" + ranges[i] + "," + counts[i] + "\n";
+                }
+                // last
+                csv += "" + type + ",>" + ranges[ranges.length - 1] + "," + counts[counts.length - 1] + "\n";
+                return csv;
+            }
+
+            csv += statsToCsv(playlistStats, "playlist");
+            csv += statsToCsv(chunklistStats, "chunklist");
+            csv += statsToCsv(chunkStats, "chunk");
+
+            let filename = 'histo_' + formatDate(new Date()) + '.csv';
+
+            downloadCsv(csv, filename);
+        }
+
+        function csvAll() {
+            let csv = "user,isp,type,startTime,url,statusCode,size(byte),responseTime(ms)\n";
+
+            statsToCsv = function (stats, type) {
+                let csv = "";
+
+                let user = $('#userID').val();
+                let isp = $('#isp').val();
+                stats.statsItems.forEach(item => {
+                    csv += "" + user + "," + isp + "," + type + "," +
+                        (new Date(item.startTime)).toISOString() + "," +
+                        item.url + "," +
+                        item.statusCode + "," +
+                        item.size + "," +
+                        item.responseTime + "\n"
+                });
+
+                //if (stats.responseTimes && stats.responseTimes.length > 0) {
+                //    stats.responseTimes.forEach(value => {
+                //        csv += "" + type + "," + value + "\n"
+                //    });
+                // }
+                return csv;
+            }
+
+            csv += statsToCsv(playlistStats, "playlist");
+            csv += statsToCsv(chunklistStats, "chunklist");
+            csv += statsToCsv(chunkStats, "chunk");
+
+            return csv;
+        }
+
+        function btnCsvAll_onclick() {
+            let csv = csvAll();
+            let filename = 'all_' + formatDate(new Date()) + '.csv';
+            downloadCsv(csv, filename);
+        }
+
+        function btnUpload_onclick() {
+            let fileName = 'test_' + formatDate(new Date()) + '.csv';
+
+            let baseUrl = $("#sasUrl").val();
+            if (!baseUrl) {
+                console.log("SAS URL is not set");
+                return;
+            }
+            let indexOfQueryStart = baseUrl.indexOf("?");
+            let submitUri = baseUrl.substring(0, indexOfQueryStart) + '/' + fileName + baseUrl.substring(indexOfQueryStart);
+            console.log(submitUri);
+
+
+            //var uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
+            let uri = submitUri;
+            let csv = csvAll();
+            //let requestData = new Uint8Array(csv);
+            var requestData = new TextEncoder().encode(csv);
+            $.ajax({
+                url: uri,
+                type: "PUT",
+                data: requestData,
+                processData: false,
+                beforeSend: function(xhr) {
+                    xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
+                    //xhr.setRequestHeader('Content-Length', requestData.length);
+                },
+                success: function (data, status) {
+                    console.log(data);
+                    console.log(status);
+                    //bytesUploaded += requestData.length;
+                    //var percentComplete = ((parseFloat(bytesUploaded) / parseFloat(selectedFile.size)) * 100).toFixed(2);
+                    //$("#fileUploadProgress").text(percentComplete + " %");
+                    //uploadFileInBlocks();
+                },
+                error: function(xhr, desc, err) {
+                    console.log(desc);
+                    console.log(err);
+                }
+            });
+        }
     </script>
 </head>
+
 <body>
-    <form id="test-url">
-        <div style="width:100%">
-            <label>Stream URL:</label>
-            <input style="width: 80%" id="url" type="url" value="http://sg002-live.sliq.net/00309-live/matrix1/Playlist.m3u8">
+    <div class="container">
+        <div class="card card-body">
+            Stream URL:
+            <input type="text" class="form-control" id="url" type="url"
+                value="http://sg002-live.sliq.net/00309-live/matrix1/Playlist.m3u8">
         </div>
+    </div>
+
+    <div class="container">
         <div>
-            <label></label>
-            <button id="btnStart" type=submit>Start</button>
+            <button class="btn btn-primary" type="button" data-toggle="collapse" data-target="#collapseSettings"
+                aria-expanded="false" aria-controls="collapseSettings">
+                Settings
+            </button>
         </div>
-    </form>
+        <div class="collapse" id="collapseSettings">
+            <div class="card card-body">
+                <Label>User ID:</Label>
+                <input type="text" class="form-control" id="userID">
+                <label>ISP:</label>
+                <input type="text" class="form-control" id="isp">
+                <Label>SAS URI: </label>
+                <input type="text" class="form-control" id="sasUrl" value="" />
+            </div>
+        </div>
+    </div>
 
     <hr>
-    <div>
-        <button id="btnClear" onclick="clearStats();">Clear</button>
-        <button id="btnDownloadCsv1" onclick="downloadCsv1();">Download CSV</button>
+    <div class="container">
+        <div class="">
+            <button id="btnStart" type="button" class="btn btn-primary" onclick="btnStart_onclick();">Start</button>
+            <button id="btnClear" type="button" class="btn btn-primary" onclick="clearStats();">Clear</button>        
+            <button id="btnCsvCode" type="button" class="btn btn-primary" onclick="btnCsvCode_onclick();">Download CSV
+                (StatusCode)</button>
+            <button id="btnCsvResponseTime" type="button" class="btn btn-primary"
+                onclick="btnCsvResponseTime_onclick();">Download CSV
+                (ResponseTime)</button>
+            <button id="btnCsvAll" type="button" class="btn btn-primary" onclick="btnCsvAll_onclick();">Download CSV
+                (All)</button>
+            <button id="btnUpload" type="button" class="btn btn-primary" onclick="btnUpload_onclick();">Test Upload</button>
+        </div>
     </div>
 
-    <div id="divPlaylistStats">
+    <hr>
+    <div id="divPlaylistStats" class="container">
         <div> Playlist Stats</div>
-        <table id="tabPlaylistStats">
+        <table id="tabPlaylistStats" class="table table-sm table-striped table-bordered">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -309,9 +550,9 @@
         </table>
     </div>
 
-    <div id="divChunklistStats">
+    <div id="divChunklistStats" class="container">
         <div> Chunklist Stats</div>
-        <table id="tabChunklistStats">
+        <table id="tabChunklistStats" class="table table-sm table-striped table-bordered">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -322,9 +563,9 @@
         </table>
     </div>
 
-    <div id="divChunkStats">
+    <div id="divChunkStats" class="container">
         <div> Chunk Stats</div>
-        <table id="tabChunkStats">
+        <table id="tabChunkStats" class="table table-sm table-striped table-bordered">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -335,4 +576,5 @@
         </table>
     </div>
 </body>
+
 </html>
