@@ -56,6 +56,11 @@
                 return "";
             }
 
+            addStats(item) {
+                this.statsItems.push(item);
+                this.updateStats(item.statusCode, item.responseTime);
+            }
+
             updateStats(status, responseTime) {
                 var key = '' + status; // convert to string
 
@@ -114,10 +119,8 @@
                     if (xhr.response && xhr.response.length)
                         size = xhr.response.length;
                     let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
-                    chunkStats.statsItems.push(item);
+                    chunkStats.addStats(item);
 
-                    //chunkStats.lastURL = url;
-                    chunkStats.updateStats(xhr.status, responseTime);
                     displayResult(chunkStats, '#tabChunkStats tbody');
                 }
             };
@@ -170,10 +173,8 @@
                     if (xhr.response && xhr.response.length)
                         size = xhr.response.length;
                     let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
-                    chunklistStats.statsItems.push(item);
+                    chunklistStats.addStats(item);
 
-                    //chunklistStats.lastURL = url;
-                    chunklistStats.updateStats(xhr.status, responseTime);
                     displayResult(chunklistStats, '#tabChunklistStats tbody');
 
                     if (playing) {
@@ -210,10 +211,8 @@
                     if (xhr.response && xhr.response.length)
                         size = xhr.response.length;
                     let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
-                    playlistStats.statsItems.push(item);
+                    playlistStats.addStats(item);
 
-                    //playlistStats.lastURL = url;
-                    playlistStats.updateStats(xhr.status, responseTime);
                     displayResult(playlistStats, '#tabPlaylistStats tbody');
                 }
             };
@@ -222,37 +221,88 @@
         }
 
         $(function () {
+            loadSettings();
+
             var txtStreamUrl = getURLParameter('url');
             if (txtStreamUrl) {
                 $('#url').val(txtStreamUrl);
             }
 
             clearStats();
-
-
-
-            /*var testUrl = document.getElementById('test-url');
-            testUrl.addEventListener('submit', function (event) {
-                event.preventDefault();
-
-                var url = document.getElementById('url');
-                var btnStart = document.getElementById("btnStart");
-                if (btnStart.textContent == "Start") {
-                    getPlaylist(url.value);
-
-                    url.readOnly = true;
-                    btnStart.textContent = "Stop";
-                    playing = true;
-                } else {
-                    // todo: stop
-                    url.readOnly = false;
-                    btnStart.textContent = "Start";
-                    playing = false;
-                }
-
-                return false;
-            });*/
+            setInterval(myTimer, 60 * 1000);
         });
+
+        $(window).on('unload', () => {
+            saveSettings();
+        })
+
+        function saveSettings() {
+            console.log('saveSettings');
+            try {
+                localStorage.setItem('url', $('#url').val());
+                localStorage.setItem('userid', $('#userID').val());
+                localStorage.setItem('isp', $('#isp').val());
+                localStorage.setItem('sasurl', $('#sasUrl').val());
+                localStorage.setItem('autoUpload', $('#autoUpload').prop('checked'));
+            } catch{
+
+            }
+        }
+
+        function loadSettings() {
+            try {
+                let value;
+                value = localStorage.getItem("url");
+                if (value) {
+                    $('#url').val(value);
+                }
+                value = localStorage.getItem("userid");
+                if (value) {
+                    $('#userID').val(value);
+                }
+                value = localStorage.getItem('isp');
+                if (value) {
+                    $('#isp').val(value);
+                }
+                value = localStorage.getItem('sasurl');
+                if (value) {
+                    $('#sasUrl').val(value);
+                }
+                value = localStorage.getItem('autoUpload');
+                if (value === 'true') {
+                    $('#autoUpload').prop('checked', true);
+                }
+            } catch {
+
+            }
+        }
+
+        var lastUploadTime = new Date().getTime();
+        function myTimer() {
+            saveSettings();
+
+            if (!$('#autoUpload').prop('checked')) {
+                return;
+            }
+
+            let timeAlign = 10 * 60 * 1000; // 10 minutes
+
+            var nextUploadTime = Math.ceil(lastUploadTime / timeAlign) * timeAlign + timeAlign;
+
+            let now = new Date().getTime();
+            if (now > nextUploadTime) {
+                let csv = csvAll(lastUploadTime, nextUploadTime);
+                //let requestData = new Uint8Array(csv);
+                let requestData = new TextEncoder().encode(csv);
+
+                let user = $('#userID').val() || 'user';
+                let fileName = 'auto_' + user + '_' + formatDate(nextUploadTime) + '.csv';
+
+                if (uploadAzure(fileName, requestData)) {
+                    lastUploadTime = nextUploadTime;
+                }
+            }
+        }
 
         function btnStart_onclick() {
             var url = $('#url');
@@ -337,6 +387,9 @@
         }
 
         function formatDate(d) {
+            if (typeof (d) === 'number') {
+                d = new Date(d);
+            }
             return d.getFullYear() +
                 ("0" + (d.getMonth() + 1)).slice(-2) +
                 ("0" + d.getDate()).slice(-2) + "-" +
@@ -345,7 +398,7 @@
                 ("0" + d.getSeconds()).slice(-2);
         }
 
-        function btnCsvCode_onclick() {
+        function csvCode() {
             let csv = "type,statusCode,count\n";
 
             statsToCsv = function (stats, type) {
@@ -360,13 +413,10 @@
             csv += statsToCsv(playlistStats, "playlist");
             csv += statsToCsv(chunklistStats, "chunklist");
             csv += statsToCsv(chunkStats, "chunk");
-
-            let filename = 'code_' + formatDate(new Date()) + '.csv';
-
-            downloadCsv(csv, filename);
+            return csv;
         }
 
-        function btnCsvResponseTime_onclick() {
+        function csvResponseTime() {
             let csv = "type,range,count\n";
 
             statsToCsv = function (stats, type) {
@@ -404,13 +454,10 @@
             csv += statsToCsv(playlistStats, "playlist");
             csv += statsToCsv(chunklistStats, "chunklist");
             csv += statsToCsv(chunkStats, "chunk");
-
-            let filename = 'histo_' + formatDate(new Date()) + '.csv';
-
-            downloadCsv(csv, filename);
+            return csv;
         }
 
-        function csvAll() {
+        function csvAll(startTime, endTime) {
             let csv = "user,isp,type,startTime,url,statusCode,size(byte),responseTime(ms)\n";
 
             statsToCsv = function (stats, type) {
@@ -419,6 +466,11 @@
                 let user = $('#userID').val();
                 let isp = $('#isp').val();
                 stats.statsItems.forEach(item => {
+                    if (startTime && item.StartTime < startTime)
+                        return;
+                    if (endTime && item.StartTime >= endTime)
+                        return;
+
                     csv += "" + user + "," + isp + "," + type + "," +
                         (new Date(item.startTime)).toISOString() + "," +
                         item.url + "," +
@@ -438,8 +490,20 @@
             csv += statsToCsv(playlistStats, "playlist");
             csv += statsToCsv(chunklistStats, "chunklist");
             csv += statsToCsv(chunkStats, "chunk");
-
             return csv;
+        }
+
+
+        function btnCsvCode_onclick() {
+            let csv = csvCode();
+            let filename = 'code_' + formatDate(new Date()) + '.csv';
+            downloadCsv(csv, filename);
+        }
+
+        function btnCsvResponseTime_onclick() {
+            let csv = csvResponseTime();
+            let filename = 'histo_' + formatDate(new Date()) + '.csv';
+            downloadCsv(csv, filename);
         }
 
         function btnCsvAll_onclick() {
@@ -448,30 +512,26 @@
             downloadCsv(csv, filename);
         }
 
-        function btnUpload_onclick() {
-            let fileName = 'test_' + formatDate(new Date()) + '.csv';
-
-            let baseUrl = $("#sasUrl").val();
+        function uploadAzure(fileName, requestData) {
+            let baseUrl = $('#sasUrl').val();
             if (!baseUrl) {
                 console.log("SAS URL is not set");
-                return;
+                return false;
             }
-            let indexOfQueryStart = baseUrl.indexOf("?");
+
+            let indexOfQueryStart = baseUrl.indexOf('?');
             let submitUri = baseUrl.substring(0, indexOfQueryStart) + '/' + fileName + baseUrl.substring(indexOfQueryStart);
             console.log(submitUri);
 
-
             //var uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
             let uri = submitUri;
-            let csv = csvAll();
-            //let requestData = new Uint8Array(csv);
-            var requestData = new TextEncoder().encode(csv);
+
             $.ajax({
                 url: uri,
                 type: "PUT",
                 data: requestData,
                 processData: false,
-                beforeSend: function(xhr) {
+                beforeSend: function (xhr) {
                     xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
                     //xhr.setRequestHeader('Content-Length', requestData.length);
                 },
@@ -481,13 +541,25 @@
                     //bytesUploaded += requestData.length;
                     //var percentComplete = ((parseFloat(bytesUploaded) / parseFloat(selectedFile.size)) * 100).toFixed(2);
                     //$("#fileUploadProgress").text(percentComplete + " %");
-                    //uploadFileInBlocks();
+                    //uploadFileInBlocks();                    
                 },
-                error: function(xhr, desc, err) {
+                error: function (xhr, desc, err) {
                     console.log(desc);
                     console.log(err);
                 }
             });
+
+            return true;
+        }
+
+        function btnUploadNow_onclick() {
+            let csv = csvAll();
+            //let requestData = new Uint8Array(csv);
+            var requestData = new TextEncoder().encode(csv);
+
+            let user = $('#userID').val() || 'user';
+            let fileName = user + '_' + formatDate(new Date()) + '.csv';
+            uploadAzure(fileName, requestData);
         }
     </script>
 </head>
@@ -514,8 +586,15 @@
                 <input type="text" class="form-control" id="userID">
                 <label>ISP:</label>
                 <input type="text" class="form-control" id="isp">
-                <Label>SAS URI: </label>
+                <Label>Azure Storage SAS URI: </label>
                 <input type="text" class="form-control" id="sasUrl" value="" />
+
+                <div class="card-body">
+                <input class="form-check-input" type="checkbox" id="autoUpload">
+                <label class="form-check-label" for="autoUpload">
+                    Upload to Azure storage every 10 minutes
+                </label>
+            </div>
             </div>
         </div>
     </div>
@@ -524,7 +603,7 @@
     <div class="container">
         <div class="">
             <button id="btnStart" type="button" class="btn btn-primary" onclick="btnStart_onclick();">Start</button>
-            <button id="btnClear" type="button" class="btn btn-primary" onclick="clearStats();">Clear</button>        
+            <button id="btnClear" type="button" class="btn btn-primary" onclick="clearStats();">Clear</button>
             <button id="btnCsvCode" type="button" class="btn btn-primary" onclick="btnCsvCode_onclick();">Download CSV
                 (StatusCode)</button>
             <button id="btnCsvResponseTime" type="button" class="btn btn-primary"
@@ -532,7 +611,8 @@
                 (ResponseTime)</button>
             <button id="btnCsvAll" type="button" class="btn btn-primary" onclick="btnCsvAll_onclick();">Download CSV
                 (All)</button>
-            <button id="btnUpload" type="button" class="btn btn-primary" onclick="btnUpload_onclick();">Test Upload</button>
+            <button id="btnUpload" type="button" class="btn btn-primary" onclick="btnUploadNow_onclick();">
+                Upload Now</button>
         </div>
     </div>
 
