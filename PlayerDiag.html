@@ -121,8 +121,9 @@
 
         var statsInfo = {
             startTime: 0,
-            ipAddress: "",
-            userAgent: ""
+            ipAddress: '',
+            userAgent: '',
+            reportTemplate: ''
         };
         var playlistStats = new Stats('#tabPlaylistStats tbody');
         var chunklistStats = new Stats('#tabChunklistStats tbody');
@@ -259,6 +260,14 @@
                         statsInfo.userAgent = line.substr(4);
                 })
             })
+
+            try {
+                $.get('PlayerDiagReport.html', function (data) {
+                    statsInfo.reportTemplate = '' + data;
+                });
+            } catch (err) {
+
+            }
 
             setting.streamURLs.forEach(item => {
                 $('#streamURLSelect').append('<option>' + item + '</option>');
@@ -803,6 +812,31 @@
             return csvRows.join('\n');
         }
 
+        function getReport() {
+            let title = `Report ${new Date()}`;
+            let report = $('#stats')[0].outerHTML;
+
+            let full = '';
+            if (statsInfo.reportTemplate) {
+                full = statsInfo.reportTemplate.replace('{title}', title).replace('{report}', report);
+            } else {
+                full = '<ht' + 'ml>' + '\n' +
+                    '<he' + 'ad>' + '\n' +
+                    '<me' + 'ta charset="utf-8" />' + '\n' +
+                    `<title>${title}</title>` + '\n' +
+                    '<li' + 'nk rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">' + '\n' +
+                    '<sc' + 'ript src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></sc' + 'ript>' + '\n' +
+                    '<style>' + '\n' +
+                    'th { background-color: darkgray; color: white; }' + '\n' +
+                    '</style>' + '\n' +
+                    '</h' + 'ead>' + '\n' +
+                    '<bo' + 'dy>' + '\n' +
+                    `    ${report}` + '\n' +
+                    '</b' + 'ody>' + '\n' +
+                    '</h' + 'tml>';
+            }
+            return full;
+        }
 
         function btnCsvStatusCode_onclick() {
             let csv = csvStatusCode();
@@ -820,6 +854,12 @@
             let csv = csvAll();
             let filename = 'All-' + formatDate(new Date()) + '.csv';
             downloadCsv(csv, filename);
+        }
+
+        function btnReport_onclick() {
+            let report = getReport();
+            let filename = 'Report-' + formatDate(new Date()) + '.html';
+            downloadCsv(report, filename);
         }
 
         function uploadAzure(fileName, requestData) {
@@ -868,7 +908,7 @@
             let requestData = new TextEncoder().encode(csv);
 
             let user = $('#userID').val().trim();
-            let name = user || 'name';
+            let name = user || 'anonym';
             let fileName = escapeFileName(name) + '-StatusCode-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
@@ -879,7 +919,7 @@
             let requestData = new TextEncoder().encode(csv);
 
             let user = $('#userID').val().trim();
-            let name = user || 'name';
+            let name = user || 'anonym';
             let fileName = escapeFileName(name) + '-ResponseTime-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
@@ -890,8 +930,18 @@
             let requestData = new TextEncoder().encode(csv);
 
             let user = $('#userID').val().trim();
-            let name = user || 'name';
+            let name = user || 'anonym';
             let fileName = escapeFileName(name) + '-All-' + formatDate(new Date()) + '.csv';
+            uploadAzure(fileName, requestData);
+        }
+
+        function uploadReport() {
+            let report = getReport();
+            let requestData = new TextEncoder().encode(report);
+
+            let user = $('#userID').val().trim();
+            let name = user || 'anonym';
+            let fileName = escapeFileName(name) + '-Report-' + formatDate(new Date()) + '.html';
             uploadAzure(fileName, requestData);
         }
 
@@ -899,6 +949,7 @@
             uploadCsvStatusCode();
             uploadCsvResponseTime();
             uploadCsvAll();
+            uploadReport();
         }
     </script>
 </head>
@@ -997,6 +1048,13 @@
                         Download CSV (ResponseTime)</button>
                     <button id="btnCsvAll" type="button" class="btn btn-primary" onclick="btnCsvAll_onclick();">
                         Download CSV (All)</button>
+                </div>
+            </div>
+            <div class="py-1">
+                <Label>Download the report (HTML) to local:</Label>
+                <div class="ml-4">
+                    <button id="btnReport" type="button" class="btn btn-primary" onclick="btnReport_onclick();">
+                        Download report (HTML)</button>
                 </div>
             </div>
             <div class="py-1">
@@ -1159,30 +1217,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
-        </div>
-
-
-        <!-- <div class="d-block">
-            <div><b>Chunk Stats</b></div>
-            <table class="table table-sm table-striped table-bordered">
-                <thead class="">
-                    <tr class="d-flex">
-                        <th class="col-6">Name</th>
-                        <th class="col-6">Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="d-flex">
-                        <td>1</td>
-                        <td>11111</td>
-                    </tr>
-                    <tr>
-                        <td>2222</td>
-                        <td>2222222</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div> -->
+        </div>        
     </div>
 
 </body>
