@@ -29,6 +29,7 @@
     </script>
 
     <script>
+        "use strict";
         class StatsItem {
             constructor(startTime, url, statusCode, size, responseTime) {
                 this.startTime = startTime;
@@ -43,11 +44,15 @@
             constructor(id) {
                 this.id = id;
 
-                this.statusCodes = {};
-                this.responseTimes = [];
-
                 // array of StatsItem
                 this.statsItems = [];
+            }
+
+            addStats(item) {
+                this.statsItems.push(item);
+                while (this.statsItems.length > 10000) {
+                    this.statsItems.shift();
+                }
             }
 
             lastURL() {
@@ -57,48 +62,67 @@
                 return "";
             }
 
-            addStats(item) {
-                this.statsItems.push(item);
-                this.updateStats(item.statusCode, item.responseTime);
+            getStatusCodes() {
+                let statusCodes = {};
+                this.statsItems.forEach(item => {
+                    let key = '' + item.statusCode; // convert to string
+                    if (statusCodes[key]) {
+                        statusCodes[key]++;
+                    } else {
+                        statusCodes[key] = 1;
+                    }
+                });
+                return statusCodes;
             }
 
-            updateStats(status, responseTime) {
-                var key = '' + status; // convert to string
-
-                if (this.statusCodes[key]) {
-                    this.statusCodes[key]++;
-                } else {
-                    this.statusCodes[key] = 1;
-                }
-
-                this.responseTimes.push(responseTime);
-                while (this.responseTimes.length > 1000) {
-                    this.responseTimes.shift();
-                }
+            responseTimeLast() {
+                if (this.statsItems.length <= 0)
+                    return 0;
+                return this.statsItems[this.statsItems.length - 1].responseTime;
             }
-
             responseTimeMin() {
-                return Math.min.apply(Math, this.responseTimes);
+                //return Math.min.apply(Math, this.responseTimes);
+
+                if (this.statsItems.length <= 0)
+                    return 0;
+                return this.statsItems.reduce((min, cur) => min < cur.responseTime ? min : cur.responseTime, this.statsItems[0].responseTime);
             }
             responseTimeMax() {
-                return Math.max.apply(Math, this.responseTimes);
+                //return Math.max.apply(Math, this.responseTimes);
+
+                if (this.statsItems.length <= 0)
+                    return 0;
+                return this.statsItems.reduce((max, cur) => max > cur.responseTime ? max : cur.responseTime, this.statsItems[0].responseTime);
             }
             responseTimeAvg() {
-                var sum = this.responseTimes.reduce((total, cur) => total + cur, 0);
-                return Math.floor(sum / this.responseTimes.length);
+                if (this.statsItems.length <= 0)
+                    return 0;
+
+                var sum = this.statsItems.reduce((total, cur) => total + cur.responseTime, 0);
+                return Math.floor(sum / this.statsItems.length);
             }
             responseTimeAvgLast10() {
-                var last10 = this.responseTimes.slice(-10);
-                var sum = last10.reduce((total, cur) => total + cur, 0);
+                if (this.statsItems.length <= 0)
+                    return 0;
+
+                var last10 = this.statsItems.slice(-10);
+                var sum = last10.reduce((total, cur) => total + cur.responseTime, 0);
                 return Math.floor(sum / last10.length);
             }
             responseTimeAvgLast100() {
-                var last100 = this.responseTimes.slice(-100);
-                var sum = last100.reduce((total, cur) => total + cur, 0);
+                if (this.statsItems.length <= 0)
+                    return 0;
+
+                var last100 = this.statsItems.slice(-100);
+                var sum = last100.reduce((total, cur) => total + cur.responseTime, 0);
                 return Math.floor(sum / last100.length);
             }
         }
 
+        var statsInfo = {
+            ipAddress: "",
+            userAgent: ""
+        };
         var playlistStats = new Stats('#tabPlaylistStats tbody');
         var chunklistStats = new Stats('#tabChunklistStats tbody');
         var chunkStats = new Stats('#tabChunkStats tbody');
@@ -107,6 +131,7 @@
     </script>
 
     <script>
+        "use strict";
         function getChunk(url) {
             let startTime = (new Date()).getTime();
 
@@ -222,6 +247,18 @@
         }
 
         $(function () {
+            // If your site is on Cloudflare, then you can use '/cdn-cgi/trace' instead
+            $.get('https://www.cloudflare.com/cdn-cgi/trace', function (data) {
+                //console.log(data)
+                let lines = ('' + data).split(/\r*?\n/g);
+                lines.forEach(line => {
+                    if (line.startsWith('ip='))
+                        statsInfo.ipAddress = line.substr(3);
+                    else if (line.startsWith('uag='))
+                        statsInfo.userAgent = line.substr(4);
+                })
+            })
+
             setting.streamURLs.forEach(item => {
                 $('#streamURLSelect').append('<option>' + item + '</option>');
             });
@@ -239,10 +276,10 @@
 
         function saveSettings() {
             //console.log('saveSettings');
-            saveValue = function (name, id) {
+            let saveValue = function (name, id) {
                 localStorage.setItem(name, $('#' + id).val());
             }
-            saveCheck = function (name, id) {
+            let saveCheck = function (name, id) {
                 localStorage.setItem(name, $('#' + id).prop('checked'));
             }
 
@@ -255,6 +292,7 @@
 
                 saveCheck('showStatusCodeStats', 'chkStatusCodeStats');
                 saveCheck('showResponseTimeStats', 'chkResponseTimeStats');
+                saveCheck('showOverallStats', 'chkOverallStats');
                 saveCheck('showPlaylistStats', 'chkPlaylistStats');
                 saveCheck('showChunklistStats', 'chkChunklistStats');
                 saveCheck('showChunkStats', 'chkChunkStats');
@@ -264,12 +302,12 @@
         }
 
         function loadSettings() {
-            loadValue = function (name, id) {
+            let loadValue = function (name, id) {
                 let value = localStorage.getItem(name);
                 if (value)
                     $('#' + id).val(value);
             }
-            loadCheck = function (name, id) {
+            let loadCheck = function (name, id) {
                 let value = localStorage.getItem(name);
                 if (value === 'true')
                     $('#' + id).prop('checked', true);
@@ -286,6 +324,7 @@
 
                 loadCheck('showStatusCodeStats', 'chkStatusCodeStats');
                 loadCheck('showResponseTimeStats', 'chkResponseTimeStats');
+                loadCheck('showOverallStats', 'chkOverallStats');
                 loadCheck('showPlaylistStats', 'chkPlaylistStats');
                 loadCheck('showChunklistStats', 'chkChunklistStats');
                 loadCheck('showChunkStats', 'chkChunkStats');
@@ -295,56 +334,66 @@
         }
 
         function chkStats_onchange() {
-            let showStats = function (chkId, divId) {
-                if ($('#' + chkId).prop('checked')) {
+            let showStats = function (chkId1, chkId2, divId) {
+                if ($('#' + chkId1).prop('checked') && $('#' + chkId2).prop('checked')) {
                     $('#' + divId).removeClass('d-none').addClass('d-block');
                 } else {
                     $('#' + divId).removeClass('d-block').addClass('d-none');
                 }
             }
 
-            showStats('chkStatusCodeStats', 'divStatusCodeStats');
-            showStats('chkResponseTimeStats', 'divResponseTimeStats');
-            showStats('chkPlaylistStats', 'divPlaylistStats');
-            showStats('chkChunklistStats', 'divChunklistStats');
-            showStats('chkChunkStats', 'divChunkStats');
+            showStats('chkStatusCodeStats', 'chkOverallStats', 'divStatusCodeStats');
+            showStats('chkResponseTimeStats', 'chkOverallStats', 'divResponseTimeStats');
+            showStats('chkStatusCodeStats', 'chkPlaylistStats', 'divStatusCodeStats_Playlist');
+            showStats('chkResponseTimeStats', 'chkPlaylistStats', 'divResponseTimeStats_Playlist');
+            showStats('chkStatusCodeStats', 'chkChunklistStats', 'divStatusCodeStats_Chunklist');
+            showStats('chkResponseTimeStats', 'chkChunklistStats', 'divResponseTimeStats_Chunklist');
+            showStats('chkStatusCodeStats', 'chkChunkStats', 'divStatusCodeStats_Chunk');
+            showStats('chkResponseTimeStats', 'chkChunkStats', 'divResponseTimeStats_Chunk');
+
+            showStats('chkPlaylistStats', 'chkPlaylistStats', 'divPlaylistStats');
+            showStats('chkChunklistStats', 'chkChunklistStats', 'divChunklistStats');
+            showStats('chkChunkStats', 'chkChunkStats', 'divChunkStats');
 
         }
 
         var lastStartTime = 0;
-        //var lastUploadTime = new Date().getTime();
+        var lastUploadTime = 0;
         function myTimer() {
             saveSettings();
 
             if (playing) {
                 let now = new Date().getTime();
                 let elapsed = now - lastStartTime;
-                $('#lblStartInfo').text('Tested ' + formatDuration(elapsed));
+                $('#lblStartInfo').text('Testing in progress ' + formatDuration(elapsed));
             } else {
                 $('#lblStartInfo').text('');
             }
 
-            /*if (!$('#autoUpload').prop('checked')) {
-                return;
-            }
+            if (playing && $('#autoUpload').prop('checked')) {
+                let timeAlign = 5 * 60 * 1000; // 5 minutes
 
-            let timeAlign = 10 * 60 * 1000; // 10 minutes
+                if (lastUploadTime < lastStartTime)
+                    lastUploadTime = lastStartTime;
+                var nextUploadTime = Math.ceil(lastUploadTime / timeAlign) * timeAlign + timeAlign;
 
-            var nextUploadTime = Math.ceil(lastUploadTime / timeAlign) * timeAlign + timeAlign;
+                let now = new Date().getTime();
+                if (now > nextUploadTime) {
+                    /*let csv = csvAll(lastUploadTime, nextUploadTime);
+                    //let requestData = new Uint8Array(csv);
+                    let requestData = new TextEncoder().encode(csv);
 
-            let now = new Date().getTime();
-            if (now > nextUploadTime) {
-                let csv = csvAll(lastUploadTime, nextUploadTime);
-                //let requestData = new Uint8Array(csv);
-                let requestData = new TextEncoder().encode(csv);
+                    let user = $('#userID').val() || 'user';
+                    let fileName = 'auto_' + user + '_' + formatDate(nextUploadTime) + '.csv';
 
-                let user = $('#userID').val() || 'user';
-                let fileName = 'auto_' + user + '_' + formatDate(nextUploadTime) + '.csv';
-
-                if (uploadAzure(fileName, requestData)) {
+                    if (uploadAzure(fileName, requestData)) {
+                        lastUploadTime = nextUploadTime;
+                    }*/
+                    btnUploadNow_onclick();
                     lastUploadTime = nextUploadTime;
                 }
-            }*/
+            }
+
         }
 
         function getStreamUrl() {
@@ -397,6 +446,7 @@
     </script>
 
     <script>
+        "use strict";
         function displayResult(stats, id) {
             var tbody = $(id).empty();
             var even = true;
@@ -413,27 +463,18 @@
                 addRow("Last URL", stats.lastURL());
             }
 
-            let statusCodes = {};
-            stats.statsItems.forEach((item) => {
-                let key = '' + item.statusCode;
-                if (statusCodes[key]) {
-                    statusCodes[key]++;
-                } else {
-                    statusCodes[key] = 1;
-                }
-            });
-
+            let statusCodes = stats.getStatusCodes();
 
             for (var key in statusCodes) {
                 var value = statusCodes[key];
                 addRow("StatusCode " + key, value);
             }
 
-            if (stats.responseTimes && stats.responseTimes.length > 0) {
-                addRow('Response Time Last (ms)', stats.responseTimes[stats.responseTimes.length - 1]);
+            if (stats.statsItems.length > 0) {
+                addRow('Response Time Last (ms)', stats.responseTimeLast());
                 addRow('Response Time Min (ms)', stats.responseTimeMin());
                 addRow('Response Time Max (ms)', stats.responseTimeMax());
-                //addRow('Response Time Avg (ms)', stats.responseTimeAvg());
+                addRow('Response Time Avg (ms)', stats.responseTimeAvg());
                 addRow('Response Time Avg (Last 10) (ms)', stats.responseTimeAvgLast10());
                 addRow('Response Time Avg (Last 100) (ms)', stats.responseTimeAvgLast100());
             }
@@ -443,17 +484,6 @@
         }
 
         function displayStatusCodeStats() {
-            var tbody = $('#tabStatusCodeStats tbody').empty();
-            var even = true;
-            var addRow = function (name, value) {
-                tbody.append(
-                    $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
-                        '<td class="col-6">' + name + '</td>' +
-                        '<td class="col-6">' + value + '</td>')
-                );
-                even = !even;
-            }
-
             let statusCodes = {};
             let getCodes = function (stats) {
                 stats.statsItems.forEach((item) => {
@@ -470,59 +500,105 @@
             getCodes(chunklistStats);
             getCodes(chunkStats);
 
-            for (var key in statusCodes) {
-                var value = statusCodes[key];
-                addRow(key, value);
+
+            let statusCodes_Playlist = playlistStats.getStatusCodes();
+            let statusCodes_Chunklist = chunklistStats.getStatusCodes();
+            let statusCodes_Chunk = chunkStats.getStatusCodes();
+
+            let displayCodes = (tbody, statusCodes) => {
+                //var tbody = $('#tabStatusCodeStats tbody').empty();                
+                var even = true;
+                var addRow = function (name, value) {
+                    tbody.append(
+                        $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
+                            '<td class="col-6">' + name + '</td>' +
+                            '<td class="col-6">' + value + '</td>')
+                    );
+                    even = !even;
+                }
+
+                for (var key in statusCodes) {
+                    var value = statusCodes[key];
+                    addRow(key, value);
+                }
             }
+
+            displayCodes($('#tabStatusCodeStats tbody').empty(), statusCodes);
+            displayCodes($('#tabStatusCodeStats_Playlist tbody').empty(), statusCodes_Playlist);
+            displayCodes($('#tabStatusCodeStats_Chunklist tbody').empty(), statusCodes_Chunklist);
+            displayCodes($('#tabStatusCodeStats_Chunk tbody').empty(), statusCodes_Chunk);
         }
 
+
         function displayResponseTimeStats() {
-            var tbody = $('#tabResponseTimeStats tbody').empty();
-            var even = true;
-            var addRow = function (name, value) {
-                tbody.append(
-                    $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
-                        '<td class="col-6">' + name + '</td>' +
-                        '<td class="col-6">' + value + '</td>')
-                );
-                even = !even;
-            }
+            let getResponseTimeHisto = (statsArr) => {
+                let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
+                let responseTimeHisto = [
+                    { key: "< 10ms", count: 0 },
+                    { key: "10ms - 100ms", count: 0 },
+                    { key: "100ms - 500ms", count: 0 },
+                    { key: "500ms - 1s", count: 0 },
+                    { key: "1s - 2.5s", count: 0 },
+                    { key: "2.5s - 5s", count: 0 },
+                    { key: "5s - 10s", count: 0 },
+                    { key: "> 10s", count: 0 },
+                ];
 
-            let i = 0;
-            let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
-            let responseTimeStats = [
-                { key: "< 10ms", count: 0 },
-                { key: "10ms - 100ms", count: 0 },
-                { key: "100ms - 500ms", count: 0 },
-                { key: "500ms - 1s", count: 0 },
-                { key: "1s - 2.5s", count: 0 },
-                { key: "2.5s - 5s", count: 0 },
-                { key: "5s - 10s", count: 0 },
-                { key: "> 10s", count: 0 },
-            ];
-
-            let getTimes = function (stats) {
-                if (stats.responseTimes && stats.responseTimes.length > 0) {
-                    stats.responseTimes.forEach(value => {
-                        for (i = 0; i < ranges.length; i++) {
-                            if (value < ranges[i]) {
-                                responseTimeStats[i].count++;
+                let getHisto = (stats) => {
+                    stats.statsItems.forEach(item => {
+                        for (let i = 0; i < ranges.length; i++) {
+                            if (item.responseTime < ranges[i]) {
+                                responseTimeHisto[i].count++;
                                 return;
                             }
                         }
                         // last
-                        responseTimeStats[responseTimeStats.length - 1].count++;
-                    });
+                        responseTimeHisto[responseTimeHisto.length - 1].count++;
+                    })
+                };
+
+                if (Array.isArray(statsArr)) {
+                    statsArr.forEach(stats => getHisto(stats));
+                } else {
+                    getHisto(statsArr);
+
+                    responseTimeHisto.push({ key: 'Last (ms)', count: statsArr.responseTimeLast() });
+                    responseTimeHisto.push({ key: 'Min (ms)', count: statsArr.responseTimeMin() });
+                    responseTimeHisto.push({ key: 'Max (ms)', count: statsArr.responseTimeMax() });
+                    responseTimeHisto.push({ key: 'Avg (ms)', count: statsArr.responseTimeAvg() });
+                    responseTimeHisto.push({ key: 'Avg (Last 10) (ms)', count: statsArr.responseTimeAvgLast10() });
+                    responseTimeHisto.push({ key: 'Avg (Last 100) (ms)', count: statsArr.responseTimeAvgLast100() });
                 }
+
+                return responseTimeHisto;
             }
 
-            getTimes(playlistStats);
-            getTimes(chunklistStats);
-            getTimes(chunkStats);
+            let playlistHisto = getResponseTimeHisto(playlistStats);
+            let chunklistHisto = getResponseTimeHisto(chunklistStats);
+            let chunkHisto = getResponseTimeHisto(chunkStats);
+            let overallHisto = getResponseTimeHisto([playlistStats, chunklistStats, chunkStats]);
 
-            responseTimeStats.forEach(item => {
-                addRow(item.key, item.count);
-            });
+            let display = (tbody, responseTimeStats) => {
+                //let tbody = $('#tabResponseTimeStats tbody').empty();
+                let even = true;
+                let addRow = function (name, value) {
+                    tbody.append(
+                        $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
+                            '<td class="col-6">' + name + '</td>' +
+                            '<td class="col-6">' + value + '</td>')
+                    );
+                    even = !even;
+                }
+
+                responseTimeStats.forEach(item => {
+                    addRow(item.key, item.count);
+                });
+            };
+
+            display($('#tabResponseTimeStats tbody').empty(), overallHisto);
+            display($('#tabResponseTimeStats_Playlist tbody').empty(), playlistHisto);
+            display($('#tabResponseTimeStats_Chunklist tbody').empty(), chunklistHisto);
+            display($('#tabResponseTimeStats_Chunk tbody').empty(), chunkHisto);
         }
 
         function clearStats() {
@@ -530,6 +606,9 @@
             chunklistStats = new Stats();
             chunkStats = new Stats();
             lastChunk = void 0; // lastChunk is undefined
+
+            displayStatusCodeStats();
+            displayResponseTimeStats();
 
             displayResult(playlistStats, '#tabPlaylistStats tbody');
             displayResult(chunklistStats, '#tabChunklistStats tbody');
@@ -578,35 +657,67 @@
             }
             return d.getFullYear() +
                 ("0" + (d.getMonth() + 1)).slice(-2) +
-                ("0" + d.getDate()).slice(-2) + "-" +
+                ("0" + d.getDate()).slice(-2) + "_" +
                 ("0" + d.getHours()).slice(-2) +
                 ("0" + d.getMinutes()).slice(-2) +
                 ("0" + d.getSeconds()).slice(-2);
         }
 
-        function csvCode() {
-            let csv = "type,statusCode,count\n";
+        function escapeCSV(term) {
+            let strTerm = '' + term; // convert to string
+            if (strTerm.match(/,|"|\n/)) {
+                let quoted = strTerm.replace(/"/g, '""');
+                return '"' + quoted + '"';
+            } else {
+                return strTerm;
+            }
+        }
 
-            statsToCsv = function (stats, type) {
-                let csv = "";
-                for (var key in stats.statusCodes) {
-                    var value = stats.statusCodes[key];
-                    csv += "" + type + "," + key + "," + value + "\n"
+        function escapeFileName(fileName) {
+            return fileName.replace(/[,\\\/:*?"<>|]/g, '_')
+        }
+
+        function getCsvHeader(headers) {
+            let user = $('#userID').val().trim();
+            let isp = $('#isp').val().trim();
+
+            let line1 = [headers.join(), 'user', 'isp', 'ipAddress', 'userAgent'].join();
+            let line2 = [','.repeat(headers.length - 1), escapeCSV(user), escapeCSV(isp), statsInfo.ipAddress, escapeCSV(statsInfo.userAgent)].join();
+            return [line1, line2].join('\n');
+        }
+
+        function csvStatusCode() {
+            //let csv = getCsvHeader(['type', 'statusCode', 'count']) + '\n';
+            let csvRows = [getCsvHeader(['type', 'statusCode', 'count'])];
+
+            let statsToCsvRows = function (stats, type) {
+                let rows = [];
+
+                let statusCodes = stats.getStatusCodes();
+                for (var key in statusCodes) {
+                    var value = statusCodes[key];
+                    rows.push("" + type + "," + key + "," + value);
                 }
-                return csv;
+                return rows;
             }
 
-            csv += statsToCsv(playlistStats, "playlist");
-            csv += statsToCsv(chunklistStats, "chunklist");
-            csv += statsToCsv(chunkStats, "chunk");
-            return csv;
+            csvRows.push(...statsToCsvRows(playlistStats, "playlist"));
+            csvRows.push(...statsToCsvRows(chunklistStats, "chunklist"));
+            csvRows.push(...statsToCsvRows(chunkStats, "chunk"));
+
+            return csvRows.join('\n');
         }
 
         function csvResponseTime() {
-            let csv = "type,range,count\n";
+            //let csv = getCsvHeader(['type', 'range', 'count']) + '\n';
+            let csvRows = [getCsvHeader(['type', 'range', 'count'])];
 
-            statsToCsv = function (stats, type) {
-                let csv = "";
+            let statsToCsvRows = function (stats, type) {
+                let getRow = (name, value) => {
+                    return '' + type + ',' + name + ',' + value;
+                }
+
+                let rows = [];
 
                 let i = 0;
                 let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
@@ -615,86 +726,85 @@
                     counts[i] = 0;
                 }
 
-                if (stats.responseTimes && stats.responseTimes.length > 0) {
-                    stats.responseTimes.forEach(value => {
-                        for (i = 0; i < ranges.length; i++) {
-                            if (value < ranges[i]) {
-                                counts[i]++;
-                                return;
-                            }
+                stats.statsItems.forEach(item => {
+                    for (let i = 0; i < ranges.length; i++) {
+                        if (item.responseTime < ranges[i]) {
+                            counts[i]++;
+                            return;
                         }
-                        // last
-                        counts[counts.length - 1]++;
-                    });
-                }
+                    }
+                    // last
+                    counts[counts.length - 1]++;
+                })
 
                 for (i = 0; i < ranges.length; i++) {
                     let prev = (i == 0 ? 0 : ranges[i - 1]);
-                    csv += "" + type + "," + prev + "-" + ranges[i] + "," + counts[i] + "\n";
+                    rows.push(getRow(prev + '-' + ranges[i], counts[i]));
                 }
                 // last
-                csv += "" + type + ",>" + ranges[ranges.length - 1] + "," + counts[counts.length - 1] + "\n";
-                return csv;
+                rows.push(getRow(">" + ranges[ranges.length - 1], counts[counts.length - 1]));
+
+
+                rows.push(getRow('Last', stats.responseTimeLast()));
+                rows.push(getRow('Min', stats.responseTimeMin()));
+                rows.push(getRow('Max', stats.responseTimeMax()));
+                rows.push(getRow('Avg', stats.responseTimeAvg()));
+                rows.push(getRow('Avg (Last 10)', stats.responseTimeAvgLast10()));
+                rows.push(getRow('Avg (Last 100)', stats.responseTimeAvgLast100()));
+
+                return rows;
+                //return rows.join('\n') + '\n';                
             }
 
-            csv += statsToCsv(playlistStats, "playlist");
-            csv += statsToCsv(chunklistStats, "chunklist");
-            csv += statsToCsv(chunkStats, "chunk");
-            return csv;
+            csvRows.push(...statsToCsvRows(playlistStats, "playlist"));
+            csvRows.push(...statsToCsvRows(chunklistStats, "chunklist"));
+            csvRows.push(...statsToCsvRows(chunkStats, "chunk"));
+
+            return csvRows.join('\n');
         }
 
         function csvAll(startTime, endTime) {
-            let csv = "user,isp,type,startTime,url,statusCode,size(byte),responseTime(ms)\n";
+            //let csv = getCsvHeader(['type', 'startTime', 'url', 'statusCode', 'size(byte)', 'responseTime(ms)']) + '\n';
+            let csvRows = [getCsvHeader(['type', 'startTime', 'url', 'statusCode', 'size(byte)', 'responseTime(ms)'])];
 
-            statsToCsv = function (stats, type) {
-                let csv = "";
+            let statsToCsvRows = function (stats, type) {
+                let rows = [];
 
-                let user = $('#userID').val();
-                let isp = $('#isp').val();
                 stats.statsItems.forEach(item => {
                     if (startTime && item.StartTime < startTime)
                         return;
                     if (endTime && item.StartTime >= endTime)
                         return;
 
-                    csv += "" + user + "," + isp + "," + type + "," +
-                        (new Date(item.startTime)).toISOString() + "," +
-                        item.url + "," +
-                        item.statusCode + "," +
-                        item.size + "," +
-                        item.responseTime + "\n"
+                    rows.push([type, (new Date(item.startTime)).toISOString(), item.url, item.statusCode, item.size, item.responseTime].join());
                 });
 
-                //if (stats.responseTimes && stats.responseTimes.length > 0) {
-                //    stats.responseTimes.forEach(value => {
-                //        csv += "" + type + "," + value + "\n"
-                //    });
-                // }
-                return csv;
+                return rows;
             }
 
-            csv += statsToCsv(playlistStats, "playlist");
-            csv += statsToCsv(chunklistStats, "chunklist");
-            csv += statsToCsv(chunkStats, "chunk");
-            return csv;
+            csvRows.push(...statsToCsvRows(playlistStats, "playlist"));
+            csvRows.push(...statsToCsvRows(chunklistStats, "chunklist"));
+            csvRows.push(...statsToCsvRows(chunkStats, "chunk"));
+
+            return csvRows.join('\n');
         }
 
 
         function btnCsvStatusCode_onclick() {
-            let csv = csvCode();
-            let filename = 'StatusCode_' + formatDate(new Date()) + '.csv';
+            let csv = csvStatusCode();
+            let filename = 'StatusCode-' + formatDate(new Date()) + '.csv';
             downloadCsv(csv, filename);
         }
 
         function btnCsvResponseTime_onclick() {
             let csv = csvResponseTime();
-            let filename = 'ResponseTime_' + formatDate(new Date()) + '.csv';
+            let filename = 'ResponseTime-' + formatDate(new Date()) + '.csv';
             downloadCsv(csv, filename);
         }
 
         function btnCsvAll_onclick() {
             let csv = csvAll();
-            let filename = 'All_' + formatDate(new Date()) + '.csv';
+            let filename = 'All-' + formatDate(new Date()) + '.csv';
             downloadCsv(csv, filename);
         }
 
@@ -707,7 +817,7 @@
 
             let indexOfQueryStart = baseUrl.indexOf('?');
             let submitUri = baseUrl.substring(0, indexOfQueryStart) + '/' + fileName + baseUrl.substring(indexOfQueryStart);
-            console.log(submitUri);
+            //console.log(submitUri);
 
             //var uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
             let uri = submitUri;
@@ -722,8 +832,8 @@
                     //xhr.setRequestHeader('Content-Length', requestData.length);
                 },
                 success: function (data, status) {
-                    console.log(data);
-                    console.log(status);
+                    //console.log(data);
+                    //console.log(status);
                     //bytesUploaded += requestData.length;
                     //var percentComplete = ((parseFloat(bytesUploaded) / parseFloat(selectedFile.size)) * 100).toFixed(2);
                     //$("#fileUploadProgress").text(percentComplete + " %");
@@ -739,12 +849,13 @@
         }
 
         function uploadCsvStatusCode() {
-            let csv = csvCode();
+            let csv = csvStatusCode();
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let name = $('#userID').val().trim() || 'name';
-            let fileName = name + '_StatusCode_' + formatDate(new Date()) + '.csv';
+            let user = $('#userID').val().trim();
+            let name = user || 'name';
+            let fileName = escapeFileName(name) + '-StatusCode-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -753,8 +864,9 @@
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let name = $('#userID').val().trim() || 'name';
-            let fileName = name + '_ResponseTime_' + formatDate(new Date()) + '.csv';
+            let user = $('#userID').val().trim();
+            let name = user || 'name';
+            let fileName = escapeFileName(name) + '-ResponseTime-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -763,8 +875,9 @@
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let name = $('#userID').val().trim() || 'name';
-            let fileName = name + '_All_' + formatDate(new Date()) + '.csv';
+            let user = $('#userID').val().trim();
+            let name = user || 'name';
+            let fileName = escapeFileName(name) + '-All-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -786,17 +899,17 @@
         <div class="pt-2 row">
             <div class="col">
                 <button id="btnStart" type="button" class="btn btn-primary" onclick="btnStart_onclick();">Start</button>
-                <Label id="lblStartInfo"></Label>
+                <Label id="lblStartInfo" class="text-info h4 ml-2"></Label>
             </div>
             <div class="col text-right">
-                <button class="btn btn-primary text-right" type="button" data-toggle="collapse" data-target="#advance"
-                    aria-expanded="false" aria-controls="advance">
-                    Advance
+                <button class="btn btn-primary text-right" type="button" data-toggle="collapse" data-target="#advanced"
+                    aria-expanded="false" aria-controls="advanced">
+                    Advanced
                 </button>
             </div>
         </div>
 
-        <div id="advance" class="contianer collapse bg-light border px-4 py-2 my-2">
+        <div id="advanced" class="contianer collapse bg-light border px-4 py-2 my-2">
             <div class="">
                 <form>
                     <div class="form-group">
@@ -820,6 +933,13 @@
                                 onchange="chkStats_onchange(this);">
                             <label class="form-check-label" for="chkResponseTimeStats">
                                 Show ResponseTime stats
+                            </label>
+                        </div>
+                        <div class="form-check ml-4 pt-2">
+                            <input class="form-check-input" type="checkbox" value="" id="chkOverallStats" checked
+                                onchange="chkStats_onchange(this);">
+                            <label class="form-check-label" for="chkOverallStats">
+                                Show Overall stats
                             </label>
                         </div>
                         <div class="form-check ml-4">
@@ -870,7 +990,7 @@
                 <div class="form-check ml-4">
                     <input class="form-check-input" type="checkbox" id="autoUpload" checked>
                     <label class="form-check-label" for="autoUpload">
-                        Upload to Azure storage after the test is finished (Click the Stop button)
+                        Upload to Azure storage every 5 minutes
                     </label>
                 </div>
                 <div class="ml-4">
@@ -884,9 +1004,8 @@
     </div>
 
     <div id="stats" class="container">
-        <!-- <div id="divStatusCodeStats" class="container d-none"> -->
         <div id="divStatusCodeStats" class="d-block">
-            <div><b>Status Code Stats</b></div>
+            <div><b>Status Code Stats (Overall)</b></div>
             <table id="tabStatusCodeStats" class="table table-sm table-striped table-bordered">
                 <thead class="">
                     <tr class="d-flex">
@@ -899,12 +1018,90 @@
         </div>
 
         <div id="divResponseTimeStats" class="d-block">
-            <div><b>Response Time Stats</b></div>
+            <div><b>Response Time Stats (Overall)</b></div>
             <table id="tabResponseTimeStats" class="table table-sm table-striped table-bordered">
                 <thead class="">
                     <tr class="d-flex">
-                        <th class="col-6">Range (Milliseconds)</th>
+                        <th class="col-6">Range</th>
                         <th class="col-6">Count</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="divStatusCodeStats_Playlist" class="d-none">
+            <div><b>Status Code Stats (Playlist)</b></div>
+            <table id="tabStatusCodeStats_Playlist" class="table table-sm table-striped table-bordered">
+                <thead class="">
+                    <tr class="d-flex">
+                        <th class="col-6">StatusCode</th>
+                        <th class="col-6">Count</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="divResponseTimeStats_Playlist" class="d-none">
+            <div><b>Response Time Stats (Playlist)</b></div>
+            <table id="tabResponseTimeStats_Playlist" class="table table-sm table-striped table-bordered">
+                <thead class="">
+                    <tr class="d-flex">
+                        <th class="col-6">Range</th>
+                        <th class="col-6">Count/Value</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="divStatusCodeStats_Chunklist" class="d-none">
+            <div><b>Status Code Stats (Chunklist)</b></div>
+            <table id="tabStatusCodeStats_Chunklist" class="table table-sm table-striped table-bordered">
+                <thead class="">
+                    <tr class="d-flex">
+                        <th class="col-6">StatusCode</th>
+                        <th class="col-6">Count</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="divResponseTimeStats_Chunklist" class="d-none">
+            <div><b>Response Time Stats (Chunklist)</b></div>
+            <table id="tabResponseTimeStats_Chunklist" class="table table-sm table-striped table-bordered">
+                <thead class="">
+                    <tr class="d-flex">
+                        <th class="col-6">Range</th>
+                        <th class="col-6">Count/Value</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="divStatusCodeStats_Chunk" class="d-none">
+            <div><b>Status Code Stats (Chunk)</b></div>
+            <table id="tabStatusCodeStats_Chunk" class="table table-sm table-striped table-bordered">
+                <thead class="">
+                    <tr class="d-flex">
+                        <th class="col-6">StatusCode</th>
+                        <th class="col-6">Count</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="divResponseTimeStats_Chunk" class="d-none">
+            <div><b>Response Time Stats (Chunk)</b></div>
+            <table id="tabResponseTimeStats_Chunk" class="table table-sm table-striped table-bordered">
+                <thead class="">
+                    <tr class="d-flex">
+                        <th class="col-6">Range</th>
+                        <th class="col-6">Count/Value</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
