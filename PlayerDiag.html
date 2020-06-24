@@ -120,6 +120,7 @@
         }
 
         var statsInfo = {
+            startTime: 0,
             ipAddress: "",
             userAgent: ""
         };
@@ -375,7 +376,7 @@
 
                 if (lastUploadTime < lastStartTime)
                     lastUploadTime = lastStartTime;
-                var nextUploadTime = Math.ceil(lastUploadTime / timeAlign) * timeAlign + timeAlign;
+                let nextUploadTime = Math.ceil(lastUploadTime / timeAlign) * timeAlign + timeAlign;
 
                 let now = new Date().getTime();
                 if (now > nextUploadTime) {
@@ -433,6 +434,8 @@
                 getPlaylist(streamUrl);
                 btnStart.text('Stop');
                 playing = true;
+                if (statsInfo.startTime == 0)
+                    statsInfo.startTime = (new Date()).getTime();
                 lastStartTime = (new Date()).getTime();
             } else {
                 // todo: stop                
@@ -602,6 +605,8 @@
         }
 
         function clearStats() {
+            statsInfo.startTime = playing ? statsInfo.startTime = (new Date()).getTime() : 0;
+
             playlistStats = new Stats();
             chunklistStats = new Stats();
             chunkStats = new Stats();
@@ -681,8 +686,17 @@
             let user = $('#userID').val().trim();
             let isp = $('#isp').val().trim();
 
-            let line1 = [headers.join(), 'user', 'isp', 'ipAddress', 'userAgent'].join();
-            let line2 = [','.repeat(headers.length - 1), escapeCSV(user), escapeCSV(isp), statsInfo.ipAddress, escapeCSV(statsInfo.userAgent)].join();
+            let line1 = [
+                headers.join(),
+                'user', 'isp', 'startTime', 'endTime', 'ipAddress', 'userAgent'
+            ].join();
+            let line2 = [
+                ','.repeat(headers.length - 1),
+                escapeCSV(user), escapeCSV(isp),
+                statsInfo.startTime == 0 ? '' : new Date(statsInfo.startTime).toISOString(),
+                statsInfo.startTime == 0 ? '' : new Date().toISOString(),
+                statsInfo.ipAddress, escapeCSV(statsInfo.userAgent)
+            ].join();
             return [line1, line2].join('\n');
         }
 
