@@ -64,6 +64,18 @@
 
             getStatusCodes() {
                 let statusCodes = {};
+
+                let sequentialTimeout = 0;
+                let curSequentialTimeout = 0;
+                this.statsItems.forEach(item => {
+                    curSequentialTimeout = (item.statusCode == 0 ? curSequentialTimeout + 1 : 0);
+                    if (sequentialTimeout < curSequentialTimeout)
+                        sequentialTimeout = curSequentialTimeout;
+                });
+                if (sequentialTimeout > 0) {
+                    statusCodes['Sequential timeout'] = sequentialTimeout;
+                }
+
                 this.statsItems.forEach(item => {
                     let key = '' + item.statusCode; // convert to string
                     if (statusCodes[key]) {
@@ -72,6 +84,7 @@
                         statusCodes[key] = 1;
                     }
                 });
+
                 return statusCodes;
             }
 
@@ -666,15 +679,27 @@
         }
 
         function formatDate(d) {
-            if (typeof (d) === 'number') {
+            if (typeof d === 'number') {
                 d = new Date(d);
             }
             return d.getFullYear() +
-                ("0" + (d.getMonth() + 1)).slice(-2) +
-                ("0" + d.getDate()).slice(-2) + "_" +
-                ("0" + d.getHours()).slice(-2) +
-                ("0" + d.getMinutes()).slice(-2) +
-                ("0" + d.getSeconds()).slice(-2);
+                ('0' + (d.getMonth() + 1)).slice(-2) +
+                ('0' + d.getDate()).slice(-2) + '_' +
+                ('0' + d.getHours()).slice(-2) +
+                ('0' + d.getMinutes()).slice(-2) +
+                ('0' + d.getSeconds()).slice(-2);
+        }
+
+        function formatDateText(d) {
+            if (typeof d === 'number') {
+                d = new Date(d);
+            }
+            return d.getFullYear() + '-' +
+                ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+                ('0' + d.getDate()).slice(-2) + ' ' +
+                ('0' + d.getHours()).slice(-2) + ':' +
+                ('0' + d.getMinutes()).slice(-2) + ':' +
+                ('0' + d.getSeconds()).slice(-2);
         }
 
         function escapeCSV(term) {
@@ -813,7 +838,7 @@
         }
 
         function getReport() {
-            let title = `Report ${new Date()}`;
+            let title = `Report on ${formatDateText(new Date())}`;
             let report = $('#stats')[0].outerHTML;
 
             let full = '';
@@ -1075,7 +1100,7 @@
         <hr>
     </div>
 
-    <div id="stats" class="container">
+    <div id="stats" class="container py-2">
         <div id="divStatusCodeStats" class="d-block">
             <div><b>Status Code Stats (Overall)</b></div>
             <table id="tabStatusCodeStats" class="table table-sm table-striped table-bordered">
@@ -1217,7 +1242,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
-        </div>        
+        </div>
     </div>
 
 </body>
