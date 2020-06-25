@@ -283,7 +283,7 @@
             }
 
             setting.streamURLs.forEach(item => {
-                $('#streamURLSelect').append('<option>' + item + '</option>');
+                $('#streamURLSelect').append($('<option></option>').val(item).text(item));
             });
 
             loadSettings();
@@ -301,10 +301,10 @@
             //console.log('saveSettings');
             let saveValue = function (name, id) {
                 localStorage.setItem(name, $('#' + id).val());
-            }
+            };
             let saveCheck = function (name, id) {
                 localStorage.setItem(name, $('#' + id).prop('checked'));
-            }
+            };
 
             try {
                 saveValue('userid', 'userID');
@@ -329,19 +329,24 @@
                 let value = localStorage.getItem(name);
                 if (value)
                     $('#' + id).val(value);
-            }
+            };
+            let loadOption = function(name, id) {
+                let value = localStorage.getItem(name);
+                if (value)
+                    $('#' + id).find(`option[value="${value}"`).attr('selected', true);
+            };
             let loadCheck = function (name, id) {
                 let value = localStorage.getItem(name);
                 if (value === 'true')
                     $('#' + id).prop('checked', true);
                 else if (value === 'false')
                     $('#' + id).prop('checked', false);
-            }
+            };
 
             try {
                 loadValue("userid", 'userID');
                 loadValue('isp', 'isp');
-                loadValue('streamUrl', 'streamURLSelect');
+                loadOption('streamUrl', 'streamURLSelect');
 
                 loadCheck('autoUpload', 'autoUpload');
 
