@@ -939,7 +939,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '-StatusCode-' + formatDate(new Date()) + '.csv';
+            let fileName = escapeFileName(name) + '/StatusCode-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -950,7 +950,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '-ResponseTime-' + formatDate(new Date()) + '.csv';
+            let fileName = escapeFileName(name) + '/ResponseTime-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -961,7 +961,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '-All-' + formatDate(new Date()) + '.csv';
+            let fileName = escapeFileName(name) + '/All-' + formatDate(new Date()) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -971,7 +971,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '-Report-' + formatDate(new Date()) + '.html';
+            let fileName = escapeFileName(name) + '/Report-' + formatDate(new Date()) + '.html';
             uploadAzure(fileName, requestData);
         }
 
