@@ -259,7 +259,7 @@
                     displayResult(playlistStats, '#tabPlaylistStats tbody');
 
                     if (playing && !hasChunklist) {
-                        setTimeout(getChunklist, 1000, url);
+                        setTimeout(getPlaylist, 10000, url);
                     }
                 }
             };
@@ -288,9 +288,15 @@
 
             }
 
-            setting.streamURLs.forEach(item => {
-                $('#streamURLSelect').append($('<option></option>').val(item).text(item));
-            });
+            let streamUrl = getURLParameter('streamurl')
+            if (streamUrl) {
+                $('#streamURLSelect').append($('<option></option>').val(streamUrl).text(streamUrl).attr('selected', true));
+                $('#streamURLSelect').prop('disabled', true);
+            } else {
+                setting.streamURLs.forEach(item => {
+                    $('#streamURLSelect').append($('<option></option>').val(item).text(item));
+                });
+            }
 
             loadSettings();
             chkStats_onchange();
@@ -306,7 +312,9 @@
         function saveSettings() {
             //console.log('saveSettings');
             let saveValue = function (name, id) {
-                localStorage.setItem(name, $('#' + id).val());
+                if (!$('#' + id).prop('disabled')) {
+                    localStorage.setItem(name, $('#' + id).val());
+                }
             };
             let saveCheck = function (name, id) {
                 localStorage.setItem(name, $('#' + id).prop('checked'));
@@ -689,7 +697,7 @@
             return str;
         }
 
-        function formatDate(d) {
+        function formatDate(d, milliPart) {
             if (typeof d === 'number') {
                 d = new Date(d);
             }
@@ -698,10 +706,11 @@
                 ('0' + d.getDate()).slice(-2) + '_' +
                 ('0' + d.getHours()).slice(-2) +
                 ('0' + d.getMinutes()).slice(-2) +
-                ('0' + d.getSeconds()).slice(-2);
+                ('0' + d.getSeconds()).slice(-2) +
+                (milliPart ? '_' + ('00' + d.getMilliseconds()).slice(-3) : '');
         }
 
-        function formatDateText(d) {
+        function formatDateText(d, milliPart) {
             if (typeof d === 'number') {
                 d = new Date(d);
             }
@@ -710,7 +719,8 @@
                 ('0' + d.getDate()).slice(-2) + ' ' +
                 ('0' + d.getHours()).slice(-2) + ':' +
                 ('0' + d.getMinutes()).slice(-2) + ':' +
-                ('0' + d.getSeconds()).slice(-2);
+                ('0' + d.getSeconds()).slice(-2) +
+                (milliPart ? '.' + ('00' + d.getMilliseconds()).slice(-3) : '');
         }
 
         function escapeCSV(term) {
@@ -724,7 +734,7 @@
         }
 
         function escapeFileName(fileName) {
-            return fileName.replace(/[,\\\/:*?"<>|]/g, '_')
+            return fileName.replace(/[ ,\\\/:*?"<>|]/g, '_')
         }
 
         function getCsvHeader(headers) {
@@ -945,7 +955,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/StatusCode-' + formatDate(new Date()) + '.csv';
+            let fileName = escapeFileName(name) + '/StatusCode-' + formatDate(new Date(), true) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -956,7 +966,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/ResponseTime-' + formatDate(new Date()) + '.csv';
+            let fileName = escapeFileName(name) + '/ResponseTime-' + formatDate(new Date(), true) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -967,7 +977,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/All-' + formatDate(new Date()) + '.csv';
+            let fileName = escapeFileName(name) + '/All-' + formatDate(new Date(), true) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -977,7 +987,7 @@
 
             let user = $('#userID').val().trim();
             let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/Report-' + formatDate(new Date()) + '.html';
+            let fileName = escapeFileName(name) + '/Report-' + formatDate(new Date(), true) + '.html';
             uploadAzure(fileName, requestData);
         }
 
@@ -1003,8 +1013,8 @@
                 <Label id="lblStartInfo" class="text-info h4 ml-2"></Label>
             </div>
             <div class="col text-right">
-                <button class="btn btn-primary text-right" type="button" data-toggle="collapse" data-target="#advanced"
-                    aria-expanded="false" aria-controls="advanced">
+                <button class="btn btn-outline-primary text-right" type="button" data-toggle="collapse"
+                    data-target="#advanced" aria-expanded="false" aria-controls="advanced">
                     Advanced
                 </button>
             </div>
@@ -1066,7 +1076,7 @@
                         </div>
 
                         <div class="ml-4">
-                            <button id="btnClear" type="button" class="btn btn-primary" onclick="clearStats();">
+                            <button id="btnClear" type="button" class="btn btn-outline-primary" onclick="clearStats();">
                                 Reset Stats</button>
                         </div>
                     </div>
@@ -1076,20 +1086,20 @@
             <div class="py-1">
                 <Label>Download the stats as CSV to local:</Label>
                 <div class="ml-4">
-                    <button id="btnCsvStatusCode" type="button" class="btn btn-primary"
+                    <button id="btnCsvStatusCode" type="button" class="btn btn-outline-primary"
                         onclick="btnCsvStatusCode_onclick();">
                         Download CSV (StatusCode)</button>
-                    <button id="btnCsvResponseTime" type="button" class="btn btn-primary"
+                    <button id="btnCsvResponseTime" type="button" class="btn btn-outline-primary"
                         onclick="btnCsvResponseTime_onclick();">
                         Download CSV (ResponseTime)</button>
-                    <button id="btnCsvAll" type="button" class="btn btn-primary" onclick="btnCsvAll_onclick();">
+                    <button id="btnCsvAll" type="button" class="btn btn-outline-primary" onclick="btnCsvAll_onclick();">
                         Download CSV (All)</button>
                 </div>
             </div>
             <div class="py-1">
                 <Label>Download the report (HTML) to local:</Label>
                 <div class="ml-4">
-                    <button id="btnReport" type="button" class="btn btn-primary" onclick="btnReport_onclick();">
+                    <button id="btnReport" type="button" class="btn btn-outline-primary" onclick="btnReport_onclick();">
                         Download report (HTML)</button>
                 </div>
             </div>
@@ -1102,7 +1112,8 @@
                     </label>
                 </div>
                 <div class="ml-4">
-                    <button id="btnUpload" type="button" class="btn btn-primary" onclick="btnUploadNow_onclick();">
+                    <button id="btnUpload" type="button" class="btn btn-outline-primary"
+                        onclick="btnUploadNow_onclick();">
                         Upload Now</button>
                 </div>
             </div>
