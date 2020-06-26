@@ -237,6 +237,7 @@
                     let endTime = (new Date()).getTime();
                     let responseTime = endTime - startTime;
 
+                    let hasChunklist = false;
                     if (xhr.status >= 200 && xhr.status < 400) {
                         var myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
                         var m = myRegexp.exec(xhr.responseText);
@@ -244,6 +245,7 @@
                             var pos = url.lastIndexOf("/");
                             var chunklistUrl = (pos > 0 ? url.substring(0, pos + 1) + m[1] : m[1]);
                             getChunklist(chunklistUrl);
+                            hasChunklist = true;
                         }
                     }
 
@@ -255,6 +257,10 @@
                     playlistStats.addStats(item);
 
                     displayResult(playlistStats, '#tabPlaylistStats tbody');
+
+                    if (playing && !hasChunklist) {
+                        setTimeout(getChunklist, 1000, url);
+                    }
                 }
             };
             xhr.open("GET", url, true);
@@ -330,7 +336,7 @@
                 if (value)
                     $('#' + id).val(value);
             };
-            let loadOption = function(name, id) {
+            let loadOption = function (name, id) {
                 let value = localStorage.getItem(name);
                 if (value)
                     $('#' + id).find(`option[value="${value}"`).attr('selected', true);
