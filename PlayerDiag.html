@@ -697,22 +697,18 @@
             return str;
         }
 
-        function formatDate(d, milliPart) {
+        function formatDate(d, timePart, milliPart) {
             if (typeof d === 'number') {
                 d = new Date(d);
             }
-            return d.getFullYear() +
-                ('0' + (d.getMonth() + 1)).slice(-2) +
-                ('0' + d.getDate()).slice(-2) + '_' +
-                ('0' + d.getHours()).slice(-2) +
-                ('0' + d.getMinutes()).slice(-2) +
-                ('0' + d.getSeconds()).slice(-2) +
+            return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) +
+                (timePart ? '_' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2) + ('0' + d.getSeconds()).slice(-2) : '') +
                 (milliPart ? '_' + ('00' + d.getMilliseconds()).slice(-3) : '');
         }
 
         function formatDateText(d, milliPart) {
             if (typeof d === 'number') {
-                d = new Date(d);
+                d = new Date(d);S
             }
             return d.getFullYear() + '-' +
                 ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
@@ -884,27 +880,31 @@
             return full;
         }
 
+        function timestampDownload(date) {
+            return formatDate(date, true, false);
+        }
+
         function btnCsvStatusCode_onclick() {
             let csv = csvStatusCode();
-            let filename = 'StatusCode-' + formatDate(new Date()) + '.csv';
+            let filename = 'StatusCode-' + timestampDownload(new Date()) + '.csv';
             downloadCsv(csv, filename);
         }
 
         function btnCsvResponseTime_onclick() {
             let csv = csvResponseTime();
-            let filename = 'ResponseTime-' + formatDate(new Date()) + '.csv';
+            let filename = 'ResponseTime-' + timestampDownload(new Date()) + '.csv';
             downloadCsv(csv, filename);
         }
 
         function btnCsvAll_onclick() {
             let csv = csvAll();
-            let filename = 'All-' + formatDate(new Date()) + '.csv';
+            let filename = 'All-' + timestampDownload(new Date()) + '.csv';
             downloadCsv(csv, filename);
         }
 
         function btnReport_onclick() {
             let report = getReport();
-            let filename = 'Report-' + formatDate(new Date()) + '.html';
+            let filename = 'Report-' + timestampDownload(new Date()) + '.html';
             downloadCsv(report, filename);
         }
 
@@ -948,14 +948,22 @@
             return true;
         }
 
+        function prefixUpload(date) {
+            let user = $('#userID').val().trim() || 'anonym';
+            return escapeFileName(user) + '/' + formatDate(date, false, false);
+        }
+        
+        function timestampUpload(date) {
+            return formatDate(date, true, true);
+        }
+
         function uploadCsvStatusCode() {
             let csv = csvStatusCode();
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let user = $('#userID').val().trim();
-            let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/StatusCode-' + formatDate(new Date(), true) + '.csv';
+            let now = new Date();            
+            let fileName = prefixUpload(now) + '/StatusCode-' + timestampUpload(now) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -964,9 +972,8 @@
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let user = $('#userID').val().trim();
-            let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/ResponseTime-' + formatDate(new Date(), true) + '.csv';
+            let now = new Date();            
+            let fileName = prefixUpload(now) + '/ResponseTime-' + timestampUpload(now) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -975,9 +982,8 @@
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let user = $('#userID').val().trim();
-            let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/All-' + formatDate(new Date(), true) + '.csv';
+            let now = new Date();
+            let fileName = prefixUpload(now) + '/All-' + timestampUpload(now) + '.csv';
             uploadAzure(fileName, requestData);
         }
 
@@ -985,9 +991,8 @@
             let report = getReport();
             let requestData = new TextEncoder().encode(report);
 
-            let user = $('#userID').val().trim();
-            let name = user || 'anonym';
-            let fileName = escapeFileName(name) + '/Report-' + formatDate(new Date(), true) + '.html';
+            let now = new Date();
+            let fileName = prefixUpload(now) + '/Report-' + timestampUpload(now) + '.html';
             uploadAzure(fileName, requestData);
         }
 
