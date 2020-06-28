@@ -30,22 +30,50 @@
 
     <script>
         "use strict";
+
+        const STATS_TYPE_PLAYLIST = 'playlist';
+        const STATS_TYPE_CHUNKLIST = 'chunklist';
+        const STATS_TYPE_CHUNK = 'chunk';
+
         class StatsItem {
-            constructor(startTime, url, statusCode, size, responseTime) {
+            constructor(statsType, startTime, url) {
+                this.statsType = statsType;
                 this.startTime = startTime;
                 this.url = url;
-                this.statusCode = statusCode;
-                this.size = size;
-                this.responseTime = responseTime;
+
+                this.timeout = false;
+                this.error = false;
+                this.statusCode = 0;
+                this.size = 0;
+                this.responseTime = 0;
+            }
+
+            update(xhr) {
+                this.statusCode = xhr.status;
+                if (xhr.response && xhr.response.length)
+                    this.size = xhr.response.length;
+
+                let endTime = (new Date()).getTime();
+                this.responseTime = endTime - this.startTime;
+                if (this.responseTime < 0)
+                    this.responseTime = 0;
             }
         }
 
         class Stats {
-            constructor(id) {
-                this.id = id;
-
+            constructor() {
                 // array of StatsItem
                 this.statsItems = [];
+
+                // event
+                this.onchanged = null;
+            }
+
+            clearStatsItems() {
+                this.statsItems = [];
+                if (this.onchanged) {
+                    this.onchanged();
+                }
             }
 
             addStats(item) {
@@ -53,30 +81,37 @@
                 while (this.statsItems.length > 10000) {
                     this.statsItems.shift();
                 }
-            }
 
-            lastURL() {
-                if (this.statsItems && this.statsItems.length > 0) {
-                    return this.statsItems[this.statsItems.length - 1].url;
+                if (this.onchanged) {
+                    this.onchanged(item.statsType);
                 }
-                return "";
             }
 
-            getStatusCodes() {
+            getTypedStatsItems(statsType) {
+                return statsType ? this.statsItems.filter(item => item.statsType == statsType) : this.statsItems;
+            }
+
+            lastURL(statsType) {
+                let typedStatsItems = this.getTypedStatsItems(statsType);
+                return typedStatsItems.length > 0 ? typedStatsItems[typedStatsItems.length - 1].url : '';
+            }
+
+            lastTimeoutURL(statsType) {
+                let timeoutItems = this.statsItems.filter(item => (!statsType || item.statsType == statsType) && item.timeout);
+                return timeoutItems.length > 0 ? timeoutItems[timeoutItems.length - 1].url : '';
+            }
+
+            lastErrorURL(statsType) {
+                let errorItems = this.statsItems.filter(item => (!statsType || item.statsType == statsType) && item.error);
+                return errorItems.length > 0 ? errorItems[errorItems.length - 1].url : '';
+            }
+
+            getStatusCodeHistogram(statsType) {
+                let typedStatsItems = this.getTypedStatsItems(statsType);
+
                 let statusCodes = {};
 
-                let sequentialTimeout = 0;
-                let curSequentialTimeout = 0;
-                this.statsItems.forEach(item => {
-                    curSequentialTimeout = (item.statusCode == 0 ? curSequentialTimeout + 1 : 0);
-                    if (sequentialTimeout < curSequentialTimeout)
-                        sequentialTimeout = curSequentialTimeout;
-                });
-                if (sequentialTimeout > 0) {
-                    statusCodes['Sequential timeout'] = sequentialTimeout;
-                }
-
-                this.statsItems.forEach(item => {
+                typedStatsItems.forEach(item => {
                     let key = '' + item.statusCode; // convert to string
                     if (statusCodes[key]) {
                         statusCodes[key]++;
@@ -85,208 +120,275 @@
                     }
                 });
 
+                let getSequential = function (cond) {
+                    let count = 0;
+                    let sequential = 0;
+                    let curSequential = 0;
+
+                    typedStatsItems.forEach(item => {
+                        count += (cond && cond(item)) ? 1 : 0;
+                        curSequential = (cond && cond(item)) ? curSequential + 1 : 0;
+                        if (sequential < curSequential)
+                            sequential = curSequential;
+                    });
+
+                    return [count, sequential];
+                }
+
+                let [timeout, sequentialTimeout] = getSequential(item => item.timeout);
+                let [error, sequentialError] = getSequential(item => item.error);
+
+                if (timeout > 0) {
+                    statusCodes['Timeout'] = timeout;
+                    statusCodes['Sequential Timeout'] = sequentialTimeout;
+                }
+                if (error > 0) {
+                    statusCodes['Error'] = error;
+                    statusCodes['Sequential Error'] = sequentialError;
+                }
+
                 return statusCodes;
             }
 
-            responseTimeLast() {
-                if (this.statsItems.length <= 0)
-                    return 0;
-                return this.statsItems[this.statsItems.length - 1].responseTime;
-            }
-            responseTimeMin() {
-                //return Math.min.apply(Math, this.responseTimes);
+            getResponseTimeHisto(statsType) {
+                let responseTimes = this.getResponseTimes(statsType);
+                if (responseTimes.length <= 0) {
+                    return [];
+                }
 
-                if (this.statsItems.length <= 0)
-                    return 0;
-                return this.statsItems.reduce((min, cur) => min < cur.responseTime ? min : cur.responseTime, this.statsItems[0].responseTime);
-            }
-            responseTimeMax() {
-                //return Math.max.apply(Math, this.responseTimes);
+                let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
+                let responseTimeHisto = [
+                    { key: "< 10ms", value: 0 },
+                    { key: "10ms - 100ms", value: 0 },
+                    { key: "100ms - 500ms", value: 0 },
+                    { key: "500ms - 1s", value: 0 },
+                    { key: "1s - 2.5s", value: 0 },
+                    { key: "2.5s - 5s", value: 0 },
+                    { key: "5s - 10s", value: 0 },
+                    { key: "> 10s", value: 0 },
+                ];
 
-                if (this.statsItems.length <= 0)
-                    return 0;
-                return this.statsItems.reduce((max, cur) => max > cur.responseTime ? max : cur.responseTime, this.statsItems[0].responseTime);
-            }
-            responseTimeAvg() {
-                if (this.statsItems.length <= 0)
-                    return 0;
+                responseTimes.forEach(value => {
+                    for (let i = 0; i < ranges.length; i++) {
+                        if (value < ranges[i]) {
+                            responseTimeHisto[i].value++;
+                            return;
+                        }
+                    }
+                    // last
+                    responseTimeHisto[responseTimeHisto.length - 1].count++;
+                })
 
-                var sum = this.statsItems.reduce((total, cur) => total + cur.responseTime, 0);
-                return Math.floor(sum / this.statsItems.length);
-            }
-            responseTimeAvgLast10() {
-                if (this.statsItems.length <= 0)
-                    return 0;
+                if (true) {
+                    responseTimeHisto.push({ key: 'Last (ms)', value: Stats.responseTimeLast(responseTimes) });
+                    responseTimeHisto.push({ key: 'Min (ms)', value: Stats.responseTimeMin(responseTimes) });
+                    responseTimeHisto.push({ key: 'Max (ms)', value: Stats.responseTimeMax(responseTimes) });
+                    responseTimeHisto.push({ key: 'Avg (ms)', value: Stats.responseTimeAvg(responseTimes) });
+                    responseTimeHisto.push({ key: 'Avg (Last 10) (ms)', value: Stats.responseTimeAvgLast10(responseTimes) });
+                    responseTimeHisto.push({ key: 'Avg (Last 100) (ms)', value: Stats.responseTimeAvgLast100(responseTimes) });
+                }
 
-                var last10 = this.statsItems.slice(-10);
-                var sum = last10.reduce((total, cur) => total + cur.responseTime, 0);
+                return responseTimeHisto;
+            }
+
+            getStatusCodes(statsType) {
+                let typedStatsItems = this.getTypedStatsItems(statsType);
+                let statusCodes = typedStatsItems.map(item => item.statusCode);
+                return statusCodes;
+            }
+
+            getResponseTimes(statsType) {
+                let typedStatsItems = this.getTypedStatsItems(statsType);
+                let responseTimes = typedStatsItems.map(item => item.responseTime);
+                return responseTimes;
+            }
+
+            static responseTimeLast(responseTimes) {
+                if (responseTimes.length <= 0)
+                    return 0;
+                return responseTimes[responseTimes.length - 1];
+            }
+            static responseTimeMin(responseTimes) {
+                if (responseTimes.length <= 0)
+                    return 0;
+                return Math.min.apply(Math, responseTimes);
+            }
+            static responseTimeMax(responseTimes) {
+                if (responseTimes.length <= 0)
+                    return 0;
+                return Math.max.apply(Math, responseTimes);
+            }
+            static responseTimeAvg(responseTimes) {
+                if (responseTimes.length <= 0)
+                    return 0;
+                let sum = responseTimes.reduce((total, cur) => total + cur, 0);
+                return Math.floor(sum / responseTimes.length);
+            }
+            static responseTimeAvgLast10(responseTimes) {
+                if (responseTimes.length <= 0)
+                    return 0;
+                let last10 = responseTimes.slice(-10);
+                let sum = last10.reduce((total, cur) => total + cur, 0);
                 return Math.floor(sum / last10.length);
             }
-            responseTimeAvgLast100() {
-                if (this.statsItems.length <= 0)
+            static responseTimeAvgLast100(responseTimes) {
+                if (responseTimes.length <= 0)
                     return 0;
-
-                var last100 = this.statsItems.slice(-100);
-                var sum = last100.reduce((total, cur) => total + cur.responseTime, 0);
+                let last100 = responseTimes.slice(-100);
+                let sum = last100.reduce((total, cur) => total + cur, 0);
                 return Math.floor(sum / last100.length);
             }
         }
 
-        var statsInfo = {
+        var statsManager = {
             startTime: 0,
+            lastStartTime: 0,
             ipAddress: '',
             userAgent: '',
-            reportTemplate: ''
+            reportTemplate: '',
+
+            stats: new Stats(),
+            timeout: 20000,
+            playing: false,
+            lastChunk: void 0, // undefined
         };
-        var playlistStats = new Stats('#tabPlaylistStats tbody');
-        var chunklistStats = new Stats('#tabChunklistStats tbody');
-        var chunkStats = new Stats('#tabChunkStats tbody');
-        var lastChunk;
-        var playing = false;
+
     </script>
 
     <script>
         "use strict";
-        function getChunk(url) {
+        function requestStream(statsType, url, callback) {
             let startTime = (new Date()).getTime();
+            let statsItem = new StatsItem(statsType, startTime, url);
 
             var xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function () {
+            /*xhr.onreadystatechange = function () {
                 if (xhr.readyState == 4) {
-                    let endTime = (new Date()).getTime();
-                    let responseTime = endTime - startTime;
-
-                    let size = 0;
-                    if (xhr.response && xhr.response.length)
-                        size = xhr.response.length;
-                    let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
-                    chunkStats.addStats(item);
-
-                    displayResult(chunkStats, '#tabChunkStats tbody');
+                    statsItem.update(xhr);
+                    statsManager.stats.addStats(statsItem);                    
                 }
-            };
+            };*/
+            xhr.ontimeout = function (evt) {
+                statsItem.timeout = true;
+            }
+            xhr.onerror = function () {
+                statsItem.error = true;
+            }
+            xhr.onloadend = function (evt) {
+                statsItem.update(xhr);
+                statsManager.stats.addStats(statsItem);
+
+                if (callback) {
+                    callback(xhr);
+                }
+            }
+
             xhr.open("GET", url, true);
+            xhr.timeout = statsManager.timeout;
             xhr.send();
         }
 
-        function getChunklist(url) {
-            let startTime = (new Date()).getTime();
+        function requestChunk(url) {
+            requestStream(STATS_TYPE_CHUNK, url, function (xhr) {
 
-            var xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState == 4) {
-                    let endTime = (new Date()).getTime();
-                    let responseTime = endTime - startTime;
-
-                    if (xhr.status == 200) {
-                        var chunks = [];
-
-                        var myRegexp = /#EXTINF.*\r?\n(.*)/g;
-                        var m = myRegexp.exec(xhr.responseText);
-                        while (m) {
-                            if (m[1] && m[1].indexOf("#") == -1) { // not empty and not starts with #
-                                chunks.push(m[1]);
-                            }
-                            m = myRegexp.exec(xhr.responseText);
-                        }
-
-                        if (chunks.length > 0) {
-                            var lastChunkIndex = chunks.indexOf(lastChunk);
-
-                            var playingChunk;
-                            if (lastChunkIndex >= 0 && lastChunkIndex < chunks.length - 1) {
-                                playingChunk = chunks[lastChunkIndex + 1];
-                            } else {
-                                playingChunk = chunks[chunks.length - 1];
-                            }
-
-                            if (playingChunk != lastChunk) {
-                                lastChunk = playingChunk;
-
-                                var pos = url.lastIndexOf("/");
-                                var chunkUrl = url.substring(0, pos + 1) + lastChunk;
-                                getChunk(chunkUrl);
-                            }
-                        }
-                    }
-
-                    let size = 0;
-                    if (xhr.response && xhr.response.length)
-                        size = xhr.response.length;
-                    let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
-                    chunklistStats.addStats(item);
-
-                    displayResult(chunklistStats, '#tabChunklistStats tbody');
-
-                    if (playing) {
-                        setTimeout(getChunklist, 8000, url);
-                    }
-                }
-            };
-            xhr.open("GET", url, true);
-            xhr.send();
+            });
         }
 
+        function requestChunklist(url) {
+            requestStream(STATS_TYPE_CHUNKLIST, url, function (xhr) {
+                if (xhr.status >= 200 && xhr.status < 400) {
+                    var chunks = [];
 
-        function getPlaylist(url) {
-            let startTime = (new Date()).getTime();
+                    var myRegexp = /#EXTINF.*\r?\n(.*)/g;
+                    var m = myRegexp.exec(xhr.responseText);
+                    while (m) {
+                        if (m[1] && m[1].indexOf("#") == -1) { // not empty and not starts with #
+                            chunks.push(m[1]);
+                        }
+                        m = myRegexp.exec(xhr.responseText);
+                    }
 
-            var xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState == 4) {
-                    let endTime = (new Date()).getTime();
-                    let responseTime = endTime - startTime;
+                    if (chunks.length > 0) {
+                        var lastChunkIndex = chunks.indexOf(statsManager.lastChunk);
 
-                    let hasChunklist = false;
-                    if (xhr.status >= 200 && xhr.status < 400) {
-                        var myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
-                        var m = myRegexp.exec(xhr.responseText);
-                        if (m && m[1]) {
+                        var playingChunk;
+                        if (lastChunkIndex >= 0 && lastChunkIndex < chunks.length - 1) {
+                            playingChunk = chunks[lastChunkIndex + 1];
+                        } else {
+                            playingChunk = chunks[chunks.length - 1];
+                        }
+
+                        if (playingChunk != statsManager.lastChunk) {
+                            statsManager.lastChunk = playingChunk;
+
                             var pos = url.lastIndexOf("/");
-                            var chunklistUrl = (pos > 0 ? url.substring(0, pos + 1) + m[1] : m[1]);
-                            getChunklist(chunklistUrl);
-                            hasChunklist = true;
+                            var chunkUrl = url.substring(0, pos + 1) + statsManager.lastChunk;
+                            if (statsManager.playing) {
+                                requestChunk(chunkUrl);
+                            }
                         }
                     }
-
-
-                    let size = 0;
-                    if (xhr.response && xhr.response.length)
-                        size = xhr.response.length;
-                    let item = new StatsItem(startTime, url, xhr.status, size, responseTime);
-                    playlistStats.addStats(item);
-
-                    displayResult(playlistStats, '#tabPlaylistStats tbody');
-
-                    if (playing && !hasChunklist) {
-                        setTimeout(getPlaylist, 10000, url);
-                    }
                 }
-            };
-            xhr.open("GET", url, true);
-            xhr.send();
+
+                if (statsManager.playing) {
+                    setTimeout(requestChunklist, 8000, url);
+                }
+            });
         }
 
-        $(function () {
+        function requestPlaylist(url) {
+            requestStream(STATS_TYPE_PLAYLIST, url, function (xhr) {
+                let hasChunklist = false;
+                if (xhr.status >= 200 && xhr.status < 400) {
+                    var myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
+                    var m = myRegexp.exec(xhr.responseText);
+                    if (m && m[1]) {
+                        var pos = url.lastIndexOf("/");
+                        var chunklistUrl = (pos > 0 ? url.substring(0, pos + 1) + m[1] : m[1]);
+                        if (statsManager.playing) {
+                            requestChunklist(chunklistUrl);
+                        }
+                        hasChunklist = true;
+                    }
+                }
+
+                if (statsManager.playing && !hasChunklist) {
+                    setTimeout(requestPlaylist, 10000, url);
+                }
+            });
+        }
+
+        function fillStatsManager() {
             // If your site is on Cloudflare, then you can use '/cdn-cgi/trace' instead
             $.get('https://www.cloudflare.com/cdn-cgi/trace', function (data) {
                 //console.log(data)
                 let lines = ('' + data).split(/\r*?\n/g);
                 lines.forEach(line => {
                     if (line.startsWith('ip='))
-                        statsInfo.ipAddress = line.substr(3);
+                        statsManager.ipAddress = line.substr(3);
                     else if (line.startsWith('uag='))
-                        statsInfo.userAgent = line.substr(4);
+                        statsManager.userAgent = line.substr(4);
                 })
             })
 
             try {
                 $.get('PlayerDiagReport.html', function (data) {
-                    statsInfo.reportTemplate = '' + data;
+                    statsManager.reportTemplate = '' + data;
                 });
             } catch (err) {
 
             }
+
+            let timeout = parseInt(getURLParameter('timeout'));
+            if (!isNaN(timeout)) {
+                statsManager.timeout = timeout;
+            }
+
+            statsManager.stats.onchanged = stats_onchanged;
+        }
+
+        $(window).on('load', function () {
+            fillStatsManager();
 
             let streamUrl = getURLParameter('streamurl')
             if (streamUrl) {
@@ -305,7 +407,7 @@
             setInterval(myTimer, 1000);
         });
 
-        $(window).on('unload', () => {
+        $(window).on('unload', function () {
             saveSettings();
         })
 
@@ -399,38 +501,27 @@
 
         }
 
-        var lastStartTime = 0;
         var lastUploadTime = 0;
         function myTimer() {
             saveSettings();
 
-            if (playing) {
-                let now = new Date().getTime();
-                let elapsed = now - lastStartTime;
+            if (statsManager.playing) {
+                let nowTime = new Date().getTime();
+                let elapsed = nowTime - statsManager.lastStartTime;
                 $('#lblStartInfo').text('Testing in progress ' + formatDuration(elapsed));
             } else {
                 $('#lblStartInfo').text('');
             }
 
-            if (playing && $('#autoUpload').prop('checked')) {
+            if (statsManager.playing && $('#autoUpload').prop('checked')) {
                 let timeAlign = 5 * 60 * 1000; // 5 minutes
 
-                if (lastUploadTime < lastStartTime)
-                    lastUploadTime = lastStartTime;
+                if (lastUploadTime < statsManager.lastStartTime)
+                    lastUploadTime = statsManager.lastStartTime;
                 let nextUploadTime = Math.ceil(lastUploadTime / timeAlign) * timeAlign + timeAlign;
 
-                let now = new Date().getTime();
-                if (now > nextUploadTime) {
-                    /*let csv = csvAll(lastUploadTime, nextUploadTime);
-                    //let requestData = new Uint8Array(csv);
-                    let requestData = new TextEncoder().encode(csv);
-
-                    let user = $('#userID').val() || 'user';
-                    let fileName = 'auto_' + user + '_' + formatDate(nextUploadTime) + '.csv';
-
-                    if (uploadAzure(fileName, requestData)) {
-                        lastUploadTime = nextUploadTime;
-                    }*/
+                let nowTime = new Date().getTime();
+                if (nowTime > nextUploadTime) {
                     btnUploadNow_onclick();
                     lastUploadTime = nextUploadTime;
                 }
@@ -442,12 +533,8 @@
             let streamUrl = getURLParameter('streamurl') || $('#streamURLSelect').val();
 
             if (streamUrl === 'Random') {
-                if (setting.streamURLs.length > 0) {
-                    let index = Math.floor(Math.random() * setting.streamURLs.length);
-                    streamUrl = setting.streamURLs[index];
-                } else {
-                    streamUrl = 'http://sg002-live.sliq.net/00309-live/matrix1/Playlist.m3u8';
-                }
+                let index = Math.floor(Math.random() * setting.streamURLs.length);
+                streamUrl = setting.streamURLs[index];
             }
             streamUrl = streamUrl || 'http://sg002-live.sliq.net/00309-live/matrix1/Playlist.m3u8';
 
@@ -465,23 +552,25 @@
         function btnStart_onclick() {
             saveSettings();
 
-
             var btnStart = $('#btnStart');
 
             if (btnStart.text() == 'Start') {
+                btnStart.text('Stop');
+                statsManager.playing = true;
+
+                let nowTime = new Date().getTime();
+                if (statsManager.startTime == 0)
+                    statsManager.startTime = nowTime;
+                statsManager.lastStartTime = nowTime;
+
                 let streamUrl = getStreamUrl();
                 console.log('testing ' + streamUrl);
 
-                getPlaylist(streamUrl);
-                btnStart.text('Stop');
-                playing = true;
-                if (statsInfo.startTime == 0)
-                    statsInfo.startTime = (new Date()).getTime();
-                lastStartTime = (new Date()).getTime();
+                requestPlaylist(streamUrl);
             } else {
                 // todo: stop                
                 btnStart.text('Start');
-                playing = false;
+                statsManager.playing = false;
 
                 btnUploadNow_onclick();
             }
@@ -491,10 +580,133 @@
 
     <script>
         "use strict";
-        function displayResult(stats, id) {
-            var tbody = $(id).empty();
-            var even = true;
-            var addRow = function (name, value) {
+
+        function stats_onchanged(statsType) {
+            if (statsType) {
+                displayStatusCodeStats(statsType);
+                displayStatusCodeStats();
+            } else {
+                displayStatusCodeStats(STATS_TYPE_PLAYLIST);
+                displayStatusCodeStats(STATS_TYPE_CHUNKLIST);
+                displayStatusCodeStats(STATS_TYPE_CHUNK);
+                displayStatusCodeStats();
+            }
+
+            if (statsType) {
+                displayResponseTimeStats(statsType);
+                displayResponseTimeStats();
+            } else {
+                displayResponseTimeStats(STATS_TYPE_PLAYLIST);
+                displayResponseTimeStats(STATS_TYPE_CHUNKLIST);
+                displayResponseTimeStats(STATS_TYPE_CHUNK);
+                displayResponseTimeStats();
+            }
+
+            if (statsType) {
+                displayResult(statsType);
+            } else {
+                displayResult(STATS_TYPE_PLAYLIST);
+                displayResult(STATS_TYPE_CHUNKLIST);
+                displayResult(STATS_TYPE_CHUNK);
+            }
+        }
+
+        function displayResult(statsType) {
+            let tbody = null;
+            switch (statsType) {
+                case STATS_TYPE_PLAYLIST:
+                    tbody = $('#tabPlaylistStats tbody'); break;
+                case STATS_TYPE_CHUNKLIST:
+                    tbody = $('#tabChunklistStats tbody'); break;
+                case STATS_TYPE_CHUNK:
+                    tbody = $('#tabChunkStats tbody'); break;
+                default:
+                    return;
+            }
+            tbody.empty();
+
+            let even = true;
+            let addRow = function (name, value) {
+                tbody.append(
+                    $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append([
+                        $('<td class="col-6"></td>').text(name),
+                        $('<td class="col-6"></td>').text(value)])
+                );
+                even = !even;
+            }
+
+            let stats = statsManager.stats;
+
+            let lastURL = stats.lastURL(statsType);
+            if (lastURL)
+                addRow("Last URL", lastURL);
+            let lastTimeoutURL = stats.lastTimeoutURL(statsType);
+            if (lastTimeoutURL)
+                addRow("Last Timeout URL", lastTimeoutURL);
+            let lastErrorURL = stats.lastErrorURL(statsType);
+            if (lastErrorURL)
+                addRow("Last Error URL", lastErrorURL);
+
+            let statusCodeHisto = stats.getStatusCodeHistogram(statsType);
+            for (let key in statusCodeHisto) {
+                let value = statusCodeHisto[key];
+                addRow('StatusCode ' + key, value);
+            }
+
+            let responseTimeHisto = stats.getResponseTimeHisto(statsType);
+            responseTimeHisto.forEach(item => {
+                addRow('Response Time ' + item.key, item.value);
+            });
+        }
+
+        function displayStatusCodeStats(statsType) {
+            let tbody = null;
+            switch (statsType) {
+                case STATS_TYPE_PLAYLIST:
+                    tbody = $('#tabStatusCodeStats_Playlist tbody'); break;
+                case STATS_TYPE_CHUNKLIST:
+                    tbody = $('#tabStatusCodeStats_Chunklist tbody'); break;
+                case STATS_TYPE_CHUNK:
+                    tbody = $('#tabStatusCodeStats_Chunk tbody'); break;
+                default:
+                    tbody = $('#tabStatusCodeStats tbody');
+            }
+            tbody.empty();
+
+            let even = true;
+            let addRow = function (name, value) {
+                tbody.append(
+                    $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append([
+                        $('<td class="col-6"></td>').text(name),
+                        $('<td class="col-6"></td>').text(value)])
+                );
+                even = !even;
+            }
+
+            let statusCodeHisto = statsManager.stats.getStatusCodeHistogram(statsType);
+            for (var key in statusCodeHisto) {
+                var value = statusCodeHisto[key];
+                addRow(key, value);
+            }
+        }
+
+
+        function displayResponseTimeStats(statsType) {
+            let tbody = null;
+            switch (statsType) {
+                case STATS_TYPE_PLAYLIST:
+                    tbody = $('#tabResponseTimeStats_Playlist tbody'); break;
+                case STATS_TYPE_CHUNKLIST:
+                    tbody = $('#tabResponseTimeStats_Chunklist tbody'); break;
+                case STATS_TYPE_CHUNK:
+                    tbody = $('#tabResponseTimeStats_Chunk tbody'); break;
+                default:
+                    tbody = $('#tabResponseTimeStats tbody');
+            }
+            tbody.empty();
+
+            let even = true;
+            let addRow = function (name, value) {
                 tbody.append(
                     $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
                         '<td class="col-6">' + name + '</td>' +
@@ -503,162 +715,17 @@
                 even = !even;
             }
 
-            if (stats.lastURL()) {
-                addRow("Last URL", stats.lastURL());
-            }
-
-            let statusCodes = stats.getStatusCodes();
-
-            for (var key in statusCodes) {
-                var value = statusCodes[key];
-                addRow("StatusCode " + key, value);
-            }
-
-            if (stats.statsItems.length > 0) {
-                addRow('Response Time Last (ms)', stats.responseTimeLast());
-                addRow('Response Time Min (ms)', stats.responseTimeMin());
-                addRow('Response Time Max (ms)', stats.responseTimeMax());
-                addRow('Response Time Avg (ms)', stats.responseTimeAvg());
-                addRow('Response Time Avg (Last 10) (ms)', stats.responseTimeAvgLast10());
-                addRow('Response Time Avg (Last 100) (ms)', stats.responseTimeAvgLast100());
-            }
-
-            displayStatusCodeStats();
-            displayResponseTimeStats();
-        }
-
-        function displayStatusCodeStats() {
-            let statusCodes = {};
-            let getCodes = function (stats) {
-                stats.statsItems.forEach((item) => {
-                    let key = '' + item.statusCode;
-                    if (statusCodes[key]) {
-                        statusCodes[key]++;
-                    } else {
-                        statusCodes[key] = 1;
-                    }
-                });
-            }
-
-            getCodes(playlistStats);
-            getCodes(chunklistStats);
-            getCodes(chunkStats);
-
-
-            let statusCodes_Playlist = playlistStats.getStatusCodes();
-            let statusCodes_Chunklist = chunklistStats.getStatusCodes();
-            let statusCodes_Chunk = chunkStats.getStatusCodes();
-
-            let displayCodes = (tbody, statusCodes) => {
-                //var tbody = $('#tabStatusCodeStats tbody').empty();                
-                var even = true;
-                var addRow = function (name, value) {
-                    tbody.append(
-                        $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
-                            '<td class="col-6">' + name + '</td>' +
-                            '<td class="col-6">' + value + '</td>')
-                    );
-                    even = !even;
-                }
-
-                for (var key in statusCodes) {
-                    var value = statusCodes[key];
-                    addRow(key, value);
-                }
-            }
-
-            displayCodes($('#tabStatusCodeStats tbody').empty(), statusCodes);
-            displayCodes($('#tabStatusCodeStats_Playlist tbody').empty(), statusCodes_Playlist);
-            displayCodes($('#tabStatusCodeStats_Chunklist tbody').empty(), statusCodes_Chunklist);
-            displayCodes($('#tabStatusCodeStats_Chunk tbody').empty(), statusCodes_Chunk);
-        }
-
-
-        function displayResponseTimeStats() {
-            let getResponseTimeHisto = (statsArr) => {
-                let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
-                let responseTimeHisto = [
-                    { key: "< 10ms", count: 0 },
-                    { key: "10ms - 100ms", count: 0 },
-                    { key: "100ms - 500ms", count: 0 },
-                    { key: "500ms - 1s", count: 0 },
-                    { key: "1s - 2.5s", count: 0 },
-                    { key: "2.5s - 5s", count: 0 },
-                    { key: "5s - 10s", count: 0 },
-                    { key: "> 10s", count: 0 },
-                ];
-
-                let getHisto = (stats) => {
-                    stats.statsItems.forEach(item => {
-                        for (let i = 0; i < ranges.length; i++) {
-                            if (item.responseTime < ranges[i]) {
-                                responseTimeHisto[i].count++;
-                                return;
-                            }
-                        }
-                        // last
-                        responseTimeHisto[responseTimeHisto.length - 1].count++;
-                    })
-                };
-
-                if (Array.isArray(statsArr)) {
-                    statsArr.forEach(stats => getHisto(stats));
-                } else {
-                    getHisto(statsArr);
-
-                    responseTimeHisto.push({ key: 'Last (ms)', count: statsArr.responseTimeLast() });
-                    responseTimeHisto.push({ key: 'Min (ms)', count: statsArr.responseTimeMin() });
-                    responseTimeHisto.push({ key: 'Max (ms)', count: statsArr.responseTimeMax() });
-                    responseTimeHisto.push({ key: 'Avg (ms)', count: statsArr.responseTimeAvg() });
-                    responseTimeHisto.push({ key: 'Avg (Last 10) (ms)', count: statsArr.responseTimeAvgLast10() });
-                    responseTimeHisto.push({ key: 'Avg (Last 100) (ms)', count: statsArr.responseTimeAvgLast100() });
-                }
-
-                return responseTimeHisto;
-            }
-
-            let playlistHisto = getResponseTimeHisto(playlistStats);
-            let chunklistHisto = getResponseTimeHisto(chunklistStats);
-            let chunkHisto = getResponseTimeHisto(chunkStats);
-            let overallHisto = getResponseTimeHisto([playlistStats, chunklistStats, chunkStats]);
-
-            let display = (tbody, responseTimeStats) => {
-                //let tbody = $('#tabResponseTimeStats tbody').empty();
-                let even = true;
-                let addRow = function (name, value) {
-                    tbody.append(
-                        $('<tr class="d-flex"></tr>')/*.addClass(even ? 'd0' : 'd1')*/.append(
-                            '<td class="col-6">' + name + '</td>' +
-                            '<td class="col-6">' + value + '</td>')
-                    );
-                    even = !even;
-                }
-
-                responseTimeStats.forEach(item => {
-                    addRow(item.key, item.count);
-                });
-            };
-
-            display($('#tabResponseTimeStats tbody').empty(), overallHisto);
-            display($('#tabResponseTimeStats_Playlist tbody').empty(), playlistHisto);
-            display($('#tabResponseTimeStats_Chunklist tbody').empty(), chunklistHisto);
-            display($('#tabResponseTimeStats_Chunk tbody').empty(), chunkHisto);
+            let responseTimeHisto = statsManager.stats.getResponseTimeHisto(statsType);
+            responseTimeHisto.forEach(item => {
+                addRow(item.key, item.value);
+            });
         }
 
         function clearStats() {
-            statsInfo.startTime = playing ? statsInfo.startTime = (new Date()).getTime() : 0;
+            statsManager.startTime = statsManager.playing ? statsManager.startTime = (new Date()).getTime() : 0;
+            statsManager.stats.clearStatsItems();
 
-            playlistStats = new Stats();
-            chunklistStats = new Stats();
-            chunkStats = new Stats();
-            lastChunk = void 0; // lastChunk is undefined
-
-            displayStatusCodeStats();
-            displayResponseTimeStats();
-
-            displayResult(playlistStats, '#tabPlaylistStats tbody');
-            displayResult(chunklistStats, '#tabChunklistStats tbody');
-            displayResult(chunkStats, '#tabChunkStats tbody');
+            statsManager.lastChunk = void 0; // lastChunk is undefined
         }
 
         function downloadCsv(csv, filename) {
@@ -708,7 +775,7 @@
 
         function formatDateText(d, milliPart) {
             if (typeof d === 'number') {
-                d = new Date(d);S
+                d = new Date(d); S
             }
             return d.getFullYear() + '-' +
                 ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
@@ -744,112 +811,79 @@
             let line2 = [
                 ','.repeat(headers.length - 1),
                 escapeCSV(user), escapeCSV(isp),
-                statsInfo.startTime == 0 ? '' : new Date(statsInfo.startTime).toISOString(),
-                statsInfo.startTime == 0 ? '' : new Date().toISOString(),
-                statsInfo.ipAddress, escapeCSV(statsInfo.userAgent)
+                statsManager.startTime == 0 ? '' : new Date(statsManager.startTime).toISOString(),
+                statsManager.startTime == 0 ? '' : new Date().toISOString(),
+                statsManager.ipAddress, escapeCSV(statsManager.userAgent)
             ].join();
             return [line1, line2].join('\n');
         }
 
         function csvStatusCode() {
-            //let csv = getCsvHeader(['type', 'statusCode', 'count']) + '\n';
             let csvRows = [getCsvHeader(['type', 'statusCode', 'count'])];
 
-            let statsToCsvRows = function (stats, type) {
+            let statsToCsvRows = function (statsType) {
                 let rows = [];
 
-                let statusCodes = stats.getStatusCodes();
-                for (var key in statusCodes) {
-                    var value = statusCodes[key];
-                    rows.push("" + type + "," + key + "," + value);
+                let statusCodeHisto = statsManager.stats.getStatusCodeHistogram(statsType);
+                for (var key in statusCodeHisto) {
+                    var value = statusCodeHisto[key];
+                    rows.push([statsType, key, value].join());
                 }
                 return rows;
             }
 
-            csvRows.push(...statsToCsvRows(playlistStats, "playlist"));
-            csvRows.push(...statsToCsvRows(chunklistStats, "chunklist"));
-            csvRows.push(...statsToCsvRows(chunkStats, "chunk"));
+            csvRows.push(...statsToCsvRows());
+            csvRows.push(...statsToCsvRows(STATS_TYPE_PLAYLIST));
+            csvRows.push(...statsToCsvRows(STATS_TYPE_CHUNKLIST));
+            csvRows.push(...statsToCsvRows(STATS_TYPE_CHUNK));
 
             return csvRows.join('\n');
         }
 
         function csvResponseTime() {
-            //let csv = getCsvHeader(['type', 'range', 'count']) + '\n';
-            let csvRows = [getCsvHeader(['type', 'range', 'count'])];
+            let csvRows = [getCsvHeader(['type', 'range', 'count/value'])];
 
-            let statsToCsvRows = function (stats, type) {
-                let getRow = (name, value) => {
-                    return '' + type + ',' + name + ',' + value;
-                }
-
+            let statsToCsvRows = function (statsType) {
                 let rows = [];
 
-                let i = 0;
-                let ranges = [10, 100, 500, 1000, 2500, 5000, 10000];
-                let counts = []; // ranges.length+1
-                for (i = 0; i <= ranges.length; i++) {
-                    counts[i] = 0;
-                }
-
-                stats.statsItems.forEach(item => {
-                    for (let i = 0; i < ranges.length; i++) {
-                        if (item.responseTime < ranges[i]) {
-                            counts[i]++;
-                            return;
-                        }
-                    }
-                    // last
-                    counts[counts.length - 1]++;
-                })
-
-                for (i = 0; i < ranges.length; i++) {
-                    let prev = (i == 0 ? 0 : ranges[i - 1]);
-                    rows.push(getRow(prev + '-' + ranges[i], counts[i]));
-                }
-                // last
-                rows.push(getRow(">" + ranges[ranges.length - 1], counts[counts.length - 1]));
-
-
-                rows.push(getRow('Last', stats.responseTimeLast()));
-                rows.push(getRow('Min', stats.responseTimeMin()));
-                rows.push(getRow('Max', stats.responseTimeMax()));
-                rows.push(getRow('Avg', stats.responseTimeAvg()));
-                rows.push(getRow('Avg (Last 10)', stats.responseTimeAvgLast10()));
-                rows.push(getRow('Avg (Last 100)', stats.responseTimeAvgLast100()));
-
-                return rows;
-                //return rows.join('\n') + '\n';                
-            }
-
-            csvRows.push(...statsToCsvRows(playlistStats, "playlist"));
-            csvRows.push(...statsToCsvRows(chunklistStats, "chunklist"));
-            csvRows.push(...statsToCsvRows(chunkStats, "chunk"));
-
-            return csvRows.join('\n');
-        }
-
-        function csvAll(startTime, endTime) {
-            //let csv = getCsvHeader(['type', 'startTime', 'url', 'statusCode', 'size(byte)', 'responseTime(ms)']) + '\n';
-            let csvRows = [getCsvHeader(['type', 'startTime', 'url', 'statusCode', 'size(byte)', 'responseTime(ms)'])];
-
-            let statsToCsvRows = function (stats, type) {
-                let rows = [];
-
-                stats.statsItems.forEach(item => {
-                    if (startTime && item.StartTime < startTime)
-                        return;
-                    if (endTime && item.StartTime >= endTime)
-                        return;
-
-                    rows.push([type, (new Date(item.startTime)).toISOString(), item.url, item.statusCode, item.size, item.responseTime].join());
+                let responseTimeHisto = statsManager.stats.getResponseTimeHisto(statsType);
+                responseTimeHisto.forEach(item => {
+                    rows.push([statsType, item.key, item.value].join());
                 });
 
                 return rows;
             }
 
-            csvRows.push(...statsToCsvRows(playlistStats, "playlist"));
-            csvRows.push(...statsToCsvRows(chunklistStats, "chunklist"));
-            csvRows.push(...statsToCsvRows(chunkStats, "chunk"));
+            csvRows.push(...statsToCsvRows());
+            csvRows.push(...statsToCsvRows(STATS_TYPE_PLAYLIST));
+            csvRows.push(...statsToCsvRows(STATS_TYPE_CHUNKLIST));
+            csvRows.push(...statsToCsvRows(STATS_TYPE_CHUNK));
+
+            return csvRows.join('\n');
+        }
+
+        function csvAll(startTime, endTime) {
+            let csvRows = [getCsvHeader(['type', 'startTime', 'url',
+                'statusCode', 'timeout', 'error', 'size(byte)', 'responseTime(ms)'])];
+
+            let statsToCsvRows = function (statsType) {
+                let stats = statsManager.stats;
+
+                stats.getTypedStatsItems(statsType).forEach(item => {
+                    if (startTime && item.StartTime < startTime)
+                        return;
+                    if (endTime && item.StartTime >= endTime)
+                        return;
+
+                    csvRows.push([item.statsType, (new Date(item.startTime)).toISOString(), item.url,
+                    item.statusCode, item.timeout, item.error, item.size, item.responseTime].join());
+                });
+            }
+
+            statsToCsvRows();
+            //statsToCsvRows(STATS_TYPE_PLAYLIST);
+            //statsToCsvRows(STATS_TYPE_CHUNKLIST);
+            //statsToCsvRows(STATS_TYPE_CHUNK);
 
             return csvRows.join('\n');
         }
@@ -858,25 +892,22 @@
             let title = `Report on ${formatDateText(new Date())}`;
             let report = $('#stats')[0].outerHTML;
 
-            let full = '';
-            if (statsInfo.reportTemplate) {
-                full = statsInfo.reportTemplate.replace('{title}', title).replace('{report}', report);
-            } else {
-                full = '<ht' + 'ml>' + '\n' +
-                    '<he' + 'ad>' + '\n' +
-                    '<me' + 'ta charset="utf-8" />' + '\n' +
-                    `<title>${title}</title>` + '\n' +
-                    '<li' + 'nk rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">' + '\n' +
-                    '<sc' + 'ript src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></sc' + 'ript>' + '\n' +
-                    '<style>' + '\n' +
-                    'th { background-color: darkgray; color: white; }' + '\n' +
-                    '</style>' + '\n' +
-                    '</h' + 'ead>' + '\n' +
-                    '<bo' + 'dy>' + '\n' +
-                    `    ${report}` + '\n' +
-                    '</b' + 'ody>' + '\n' +
-                    '</h' + 'tml>';
-            }
+            let template = statsManager.reportTemplate || '<ht' + 'ml>' + '\n' +
+                '<he' + 'ad>' + '\n' +
+                '<me' + 'ta charset="utf-8" />' + '\n' +
+                '<title>{title}</title>' + '\n' +
+                '<li' + 'nk rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">' + '\n' +
+                '<sc' + 'ript src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></sc' + 'ript>' + '\n' +
+                '<style>' + '\n' +
+                'th { background-color: darkgray; color: white; }' + '\n' +
+                '</style>' + '\n' +
+                '</h' + 'ead>' + '\n' +
+                '<bo' + 'dy>' + '\n' +
+                '    {report}' + '\n' +
+                '</b' + 'ody>' + '\n' +
+                '</h' + 'tml>';
+
+            let full = template.replace('{title}', title).replace('{report}', report);
             return full;
         }
 
@@ -952,7 +983,7 @@
             let user = $('#userID').val().trim() || 'anonym';
             return escapeFileName(user) + '/' + formatDate(date, false, false);
         }
-        
+
         function timestampUpload(date) {
             return formatDate(date, true, true);
         }
@@ -962,7 +993,7 @@
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let now = new Date();            
+            let now = new Date();
             let fileName = prefixUpload(now) + '/StatusCode-' + timestampUpload(now) + '.csv';
             uploadAzure(fileName, requestData);
         }
@@ -972,7 +1003,7 @@
             //let requestData = new Uint8Array(csv);
             let requestData = new TextEncoder().encode(csv);
 
-            let now = new Date();            
+            let now = new Date();
             let fileName = prefixUpload(now) + '/ResponseTime-' + timestampUpload(now) + '.csv';
             uploadAzure(fileName, requestData);
         }
@@ -1147,7 +1178,7 @@
                 <thead class="">
                     <tr class="d-flex">
                         <th class="col-6">Range</th>
-                        <th class="col-6">Count</th>
+                        <th class="col-6">Count/Value</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
