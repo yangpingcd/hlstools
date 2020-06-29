@@ -808,6 +808,7 @@
                 headers.join(),
                 'user', 'isp', 'startTime', 'endTime', 'ipAddress', 'userAgent'
             ].join();
+
             let line2 = [
                 ','.repeat(headers.length - 1),
                 escapeCSV(user), escapeCSV(isp),
@@ -815,11 +816,12 @@
                 statsManager.startTime == 0 ? '' : new Date().toISOString(),
                 statsManager.ipAddress, escapeCSV(statsManager.userAgent)
             ].join();
-            return [line1, line2].join('\n');
+
+            return [line1, line2];
         }
 
         function csvStatusCode() {
-            let csvRows = [getCsvHeader(['type', 'statusCode', 'count'])];
+            let csvRows = getCsvHeader(['type', 'status', 'count']);
 
             let statsToCsvRows = function (statsType) {
                 let rows = [];
@@ -841,7 +843,7 @@
         }
 
         function csvResponseTime() {
-            let csvRows = [getCsvHeader(['type', 'range', 'count/value'])];
+            let csvRows = getCsvHeader(['type', 'range', 'count/value']);
 
             let statsToCsvRows = function (statsType) {
                 let rows = [];
@@ -863,8 +865,8 @@
         }
 
         function csvAll(startTime, endTime) {
-            let csvRows = [getCsvHeader(['type', 'startTime', 'url',
-                'statusCode', 'timeout', 'error', 'size(byte)', 'responseTime(ms)'])];
+            let csvRows = getCsvHeader(['type', 'start', 'url',
+                'status', 'timeout', 'error', 'size(byte)', 'time(ms)']);
 
             let statsToCsvRows = function (statsType) {
                 let stats = statsManager.stats;
