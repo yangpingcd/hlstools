@@ -261,7 +261,7 @@
             let startTime = (new Date()).getTime();
             let statsItem = new StatsItem(statsType, startTime, url);
 
-            var xhr = new XMLHttpRequest();
+            let xhr = new XMLHttpRequest();
             /*xhr.onreadystatechange = function () {
                 if (xhr.readyState == 4) {
                     statsItem.update(xhr);
@@ -297,10 +297,10 @@
         function requestChunklist(url) {
             requestStream(STATS_TYPE_CHUNKLIST, url, function (xhr) {
                 if (xhr.status >= 200 && xhr.status < 400) {
-                    var chunks = [];
+                    let chunks = [];
 
-                    var myRegexp = /#EXTINF.*\r?\n(.*)/g;
-                    var m = myRegexp.exec(xhr.responseText);
+                    let myRegexp = /#EXTINF.*\r?\n(.*)/g;
+                    let m = myRegexp.exec(xhr.responseText);
                     while (m) {
                         if (m[1] && m[1].indexOf("#") == -1) { // not empty and not starts with #
                             chunks.push(m[1]);
@@ -309,9 +309,9 @@
                     }
 
                     if (chunks.length > 0) {
-                        var lastChunkIndex = chunks.indexOf(statsManager.lastChunk);
+                        let lastChunkIndex = chunks.indexOf(statsManager.lastChunk);
 
-                        var playingChunk;
+                        let playingChunk;
                         if (lastChunkIndex >= 0 && lastChunkIndex < chunks.length - 1) {
                             playingChunk = chunks[lastChunkIndex + 1];
                         } else {
@@ -321,8 +321,8 @@
                         if (playingChunk != statsManager.lastChunk) {
                             statsManager.lastChunk = playingChunk;
 
-                            var pos = url.lastIndexOf("/");
-                            var chunkUrl = url.substring(0, pos + 1) + statsManager.lastChunk;
+                            let pos = url.lastIndexOf("/");
+                            let chunkUrl = url.substring(0, pos + 1) + statsManager.lastChunk;
                             if (statsManager.playing) {
                                 requestChunk(chunkUrl);
                             }
@@ -340,11 +340,11 @@
             requestStream(STATS_TYPE_PLAYLIST, url, function (xhr) {
                 let hasChunklist = false;
                 if (xhr.status >= 200 && xhr.status < 400) {
-                    var myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
-                    var m = myRegexp.exec(xhr.responseText);
+                    let myRegexp = /#EXT-X-STREAM-INF.*\r?\n(.*)/;
+                    let m = myRegexp.exec(xhr.responseText);
                     if (m && m[1]) {
-                        var pos = url.lastIndexOf("/");
-                        var chunklistUrl = (pos > 0 ? url.substring(0, pos + 1) + m[1] : m[1]);
+                        let pos = url.lastIndexOf("/");
+                        let chunklistUrl = (pos > 0 ? url.substring(0, pos + 1) + m[1] : m[1]);
                         if (statsManager.playing) {
                             requestChunklist(chunklistUrl);
                         }
@@ -552,7 +552,7 @@
         function btnStart_onclick() {
             saveSettings();
 
-            var btnStart = $('#btnStart');
+            let btnStart = $('#btnStart');
 
             if (btnStart.text() == 'Start') {
                 btnStart.text('Stop');
@@ -684,8 +684,8 @@
             }
 
             let statusCodeHisto = statsManager.stats.getStatusCodeHistogram(statsType);
-            for (var key in statusCodeHisto) {
-                var value = statusCodeHisto[key];
+            for (let key in statusCodeHisto) {
+                let value = statusCodeHisto[key];
                 addRow(key, value);
             }
         }
@@ -827,8 +827,8 @@
                 let rows = [];
 
                 let statusCodeHisto = statsManager.stats.getStatusCodeHistogram(statsType);
-                for (var key in statusCodeHisto) {
-                    var value = statusCodeHisto[key];
+                for (let key in statusCodeHisto) {
+                    let value = statusCodeHisto[key];
                     rows.push([statsType, key, value].join());
                 }
                 return rows;
@@ -865,7 +865,8 @@
         }
 
         function csvAll(startTime, endTime) {
-            let csvRows = getCsvHeader(['type', 'start', 'url',
+            let csvRows = getCsvHeader([
+                'type', 'start', 'url',
                 'status', 'timeout', 'error', 'size(byte)', 'time(ms)']);
 
             let statsToCsvRows = function (statsType) {
@@ -877,8 +878,9 @@
                     if (endTime && item.StartTime >= endTime)
                         return;
 
-                    csvRows.push([item.statsType, (new Date(item.startTime)).toISOString(), item.url,
-                    item.statusCode, item.timeout, item.error, item.size, item.responseTime].join());
+                    csvRows.push([
+                        item.statsType, (new Date(item.startTime)).toISOString(), item.url,
+                        item.statusCode, item.timeout, item.error, item.size, item.responseTime].join());
                 });
             }
 
@@ -952,7 +954,7 @@
             let submitUri = baseUrl.substring(0, indexOfQueryStart) + '/' + fileName + baseUrl.substring(indexOfQueryStart);
             //console.log(submitUri);
 
-            //var uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
+            //let uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
             let uri = submitUri;
 
             $.ajax({
@@ -968,7 +970,7 @@
                     //console.log(data);
                     //console.log(status);
                     //bytesUploaded += requestData.length;
-                    //var percentComplete = ((parseFloat(bytesUploaded) / parseFloat(selectedFile.size)) * 100).toFixed(2);
+                    //let percentComplete = ((parseFloat(bytesUploaded) / parseFloat(selectedFile.size)) * 100).toFixed(2);
                     //$("#fileUploadProgress").text(percentComplete + " %");
                     //uploadFileInBlocks();                    
                 },
@@ -1048,9 +1050,9 @@
         <div class="pt-2 row">
             <div class="col">
                 <button id="btnStart" type="button" class="btn btn-primary" onclick="btnStart_onclick();">Start</button>
-                <Label id="lblStartInfo" class="text-info h4 ml-2"></Label>
+                <Label id="lblStartInfo" class="text-info align-middle h4 ml-2"></Label>
             </div>
-            <div class="col text-right">
+            <div class="col-auto text-right">
                 <button class="btn btn-outline-primary text-right" type="button" data-toggle="collapse"
                     data-target="#advanced" aria-expanded="false" aria-controls="advanced">
                     Advanced
