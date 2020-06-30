@@ -87,8 +87,23 @@
                 }
             }
 
-            getTypedStatsItems(statsType) {
-                return statsType ? this.statsItems.filter(item => item.statsType == statsType) : this.statsItems;
+            getTypedStatsItems(statsType, cond) {
+                if (!statsType && !cond)
+                    return this.statsItems;
+                return this.statsItems.filter(item => (!statsType || item.statsType == statsType) && (!cond || cond(item)));
+            }
+
+            getTimeoutStatsItems(statsType) {
+                return this.getTypedStatsItems(statsType, item => item.timeout);
+            }
+
+            getErrorStatsItems(statsType) {
+                return this.getTypedStatsItems(statsType, item => item.error);
+            }
+
+            lastStatsItem(statsType) {
+                let typedStatsItems = this.getTypedStatsItems(statsType);
+                return typedStatsItems.length > 0 ? typedStatsItems[typedStatsItems.length - 1] : null;
             }
 
             lastURL(statsType) {
@@ -96,13 +111,23 @@
                 return typedStatsItems.length > 0 ? typedStatsItems[typedStatsItems.length - 1].url : '';
             }
 
+            lastTimeoutStatsItem(statsType) {
+                let timeoutItems = this.getTimeoutStatsItems(statsType);
+                return timeoutItems.length > 0 ? timeoutItems[timeoutItems.length - 1] : null;
+            }
+
             lastTimeoutURL(statsType) {
-                let timeoutItems = this.statsItems.filter(item => (!statsType || item.statsType == statsType) && item.timeout);
+                let timeoutItems = this.getTimeoutStatsItems(statsType);
                 return timeoutItems.length > 0 ? timeoutItems[timeoutItems.length - 1].url : '';
             }
 
+            lastErrorStatsItem(statsType) {
+                let errorItems = this.getErrorStatsItems(statsType);
+                return errorItems.length > 0 ? errorItems[errorItems.length - 1] : null;
+            }
+
             lastErrorURL(statsType) {
-                let errorItems = this.statsItems.filter(item => (!statsType || item.statsType == statsType) && item.error);
+                let errorItems = this.getErrorStatsItems(statsType);
                 return errorItems.length > 0 ? errorItems[errorItems.length - 1].url : '';
             }
 
@@ -637,15 +662,20 @@
 
             let stats = statsManager.stats;
 
-            let lastURL = stats.lastURL(statsType);
-            if (lastURL)
-                addRow("Last URL", lastURL);
-            let lastTimeoutURL = stats.lastTimeoutURL(statsType);
-            if (lastTimeoutURL)
-                addRow("Last Timeout URL", lastTimeoutURL);
-            let lastErrorURL = stats.lastErrorURL(statsType);
-            if (lastErrorURL)
-                addRow("Last Error URL", lastErrorURL);
+            let last = stats.lastStatsItem(statsType);
+            if (last) {
+                addRow("Last URL", last.url);
+            }
+            let lastTimeout = stats.lastTimeoutStatsItem(statsType);
+            if (lastTimeout) {
+                addRow("Last Timeout URL", lastTimeout.url);
+                addRow("Last Timeout happens", formatDateText(lastTimeout.startTime));
+            }
+            let lastError = stats.lastErrorStatsItem(statsType);
+            if (lastError) {
+                addRow("Last Error URL", lastError.url);
+                addRow("Last Error happens", formatDateText(lastError.startTime));
+            }
 
             let statusCodeHisto = stats.getStatusCodeHistogram(statsType);
             for (let key in statusCodeHisto) {
@@ -775,7 +805,7 @@
 
         function formatDateText(d, milliPart) {
             if (typeof d === 'number') {
-                d = new Date(d); S
+                d = new Date(d);
             }
             return d.getFullYear() + '-' +
                 ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
