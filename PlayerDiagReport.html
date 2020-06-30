@@ -70,52 +70,53 @@
 </head>
 
 <body>
-    <div class="container">
-        <Label>Show Stats Options:</Label>
-        <div class="form-check ml-4">
-            <input class="form-check-input" type="checkbox" value="" id="chkStatusCodeStats"
-                onchange="chkStats_onchange(this);">
-            <label class="form-check-label" for="chkStatusCodeStats">
-                Show StatusCode stats
-            </label>
-        </div>
-        <div class="form-check ml-4">
-            <input class="form-check-input" type="checkbox" value="" id="chkResponseTimeStats"
-                onchange="chkStats_onchange(this);">
-            <label class="form-check-label" for="chkResponseTimeStats">
-                Show ResponseTime stats
-            </label>
-        </div>
-        <div class="form-check ml-4 pt-2">
-            <input class="form-check-input" type="checkbox" value="" id="chkOverallStats"
-                onchange="chkStats_onchange(this);">
-            <label class="form-check-label" for="chkOverallStats">
-                Show Overall stats
-            </label>
-        </div>
-        <div class="form-check ml-4">
-            <input class="form-check-input" type="checkbox" value="" id="chkPlaylistStats"
-                onchange="chkStats_onchange(this);">
-            <label class="form-check-label" for="chkPlaylistStats">
-                Show Playlist stats
-            </label>
-        </div>
-        <div class="form-check ml-4">
-            <input class="form-check-input" type="checkbox" value="" id="chkChunklistStats"
-                onchange="chkStats_onchange(this);">
-            <label class="form-check-label" for="chkChunklistStats">
-                Show Chunklist stats
-            </label>
-        </div>
-        <div class="form-check ml-4">
-            <input class="form-check-input" type="checkbox" value="" id="chkChunkStats"
-                onchange="chkStats_onchange(this);">
-            <label class="form-check-label" for="chkChunkStats">
-                Show Chunk stats
-            </label>
+    <div class="container my-2">
+        <div class="container py-2 border bg-light">
+            <Label>Show Stats Options:</Label>
+            <div class="form-check ml-4">
+                <input class="form-check-input" type="checkbox" value="" id="chkStatusCodeStats"
+                    onchange="chkStats_onchange(this);">
+                <label class="form-check-label" for="chkStatusCodeStats">
+                    Show StatusCode stats
+                </label>
+            </div>
+            <div class="form-check ml-4">
+                <input class="form-check-input" type="checkbox" value="" id="chkResponseTimeStats"
+                    onchange="chkStats_onchange(this);">
+                <label class="form-check-label" for="chkResponseTimeStats">
+                    Show ResponseTime stats
+                </label>
+            </div>
+            <div class="form-check ml-4 pt-2">
+                <input class="form-check-input" type="checkbox" value="" id="chkOverallStats"
+                    onchange="chkStats_onchange(this);">
+                <label class="form-check-label" for="chkOverallStats">
+                    Show Overall stats
+                </label>
+            </div>
+            <div class="form-check ml-4">
+                <input class="form-check-input" type="checkbox" value="" id="chkPlaylistStats"
+                    onchange="chkStats_onchange(this);">
+                <label class="form-check-label" for="chkPlaylistStats">
+                    Show Playlist stats
+                </label>
+            </div>
+            <div class="form-check ml-4">
+                <input class="form-check-input" type="checkbox" value="" id="chkChunklistStats"
+                    onchange="chkStats_onchange(this);">
+                <label class="form-check-label" for="chkChunklistStats">
+                    Show Chunklist stats
+                </label>
+            </div>
+            <div class="form-check ml-4">
+                <input class="form-check-input" type="checkbox" value="" id="chkChunkStats"
+                    onchange="chkStats_onchange(this);">
+                <label class="form-check-label" for="chkChunkStats">
+                    Show Chunk stats
+                </label>
+            </div>
         </div>
     </div>
-
     {report}
 </body>
 
