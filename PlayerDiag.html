@@ -266,6 +266,7 @@
         }
 
         var statsManager = {
+            streamUrl: '',
             startTime: 0,
             lastStartTime: 0,
             ipAddress: '',
@@ -583,13 +584,14 @@
                 btnStart.text('Stop');
                 statsManager.playing = true;
 
+                let streamUrl = getStreamUrl();
+                console.log('testing ' + streamUrl);
+
+                statsManager.streamUrl = streamUrl;
                 let nowTime = new Date().getTime();
                 if (statsManager.startTime == 0)
                     statsManager.startTime = nowTime;
                 statsManager.lastStartTime = nowTime;
-
-                let streamUrl = getStreamUrl();
-                console.log('testing ' + streamUrl);
 
                 requestPlaylist(streamUrl);
             } else {
@@ -830,6 +832,10 @@
             return fileName.replace(/[ ,\\\/:*?"<>|]/g, '_')
         }
 
+        function encodeHTML(html) {
+            return document.createElement('div').appendChild(document.createTextNode(html)).parentNode.innerHTML;
+        };
+
         function getCsvHeader(headers) {
             let user = $('#userID').val().trim();
             let isp = $('#isp').val().trim();
@@ -923,13 +929,25 @@
         }
 
         function getReport() {
-            let title = `Report on ${formatDateText(new Date())}`;
-            let report = $('#stats')[0].outerHTML;
+            let now = new Date();
+
+            let mapObj = {
+                name: encodeHTML($('#userID').val()),
+                isp: encodeHTML($('#isp').val()),
+                ipaddress: statsManager.ipAddress,
+                useragent: encodeHTML(statsManager.userAgent),
+                streamurl: encodeHTML(statsManager.streamUrl),
+                starttime: statsManager.startTime ? formatDateText(statsManager.startTime) : '',
+                endtime: formatDateText(now),
+
+                title: 'Report on ' + formatDateText(now),
+                report: $('#stats')[0].outerHTML,
+            }
 
             let template = statsManager.reportTemplate || '<ht' + 'ml>' + '\n' +
                 '<he' + 'ad>' + '\n' +
                 '<me' + 'ta charset="utf-8" />' + '\n' +
-                '<title>{title}</title>' + '\n' +
+                '<title>${title}</title>' + '\n' +
                 '<li' + 'nk rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">' + '\n' +
                 '<sc' + 'ript src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></sc' + 'ript>' + '\n' +
                 '<style>' + '\n' +
@@ -937,12 +955,14 @@
                 '</style>' + '\n' +
                 '</h' + 'ead>' + '\n' +
                 '<bo' + 'dy>' + '\n' +
-                '    {report}' + '\n' +
+                '    ${report}' + '\n' +
                 '</b' + 'ody>' + '\n' +
                 '</h' + 'tml>';
 
-            let full = template.replace('{title}', title).replace('{report}', report);
-            return full;
+
+            let pattern = Object.keys(mapObj).map(v => '\\${' + v + '}').join("|")
+            let re = new RegExp(pattern, 'gi');
+            return template.replace(re, matched => mapObj[matched.substr(2, matched.length - 3).toLowerCase()]);
         }
 
         function timestampDownload(date) {
