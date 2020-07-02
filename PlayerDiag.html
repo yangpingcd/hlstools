@@ -31,7 +31,7 @@
 
     <script>
         'use strict';
-        
+
         function fillStatsManager() {
             // If your site is on Cloudflare, then you can use '/cdn-cgi/trace' instead
             $.get('https://www.cloudflare.com/cdn-cgi/trace', function (data) {
@@ -585,8 +585,8 @@
                 ipaddress: statsManager.ipAddress,
                 useragent: encodeHTML(statsManager.userAgent),
                 streamurl: encodeHTML(statsManager.streamUrl),
-                starttime: statsManager.startTime ? formatDateText(statsManager.startTime) : '',
-                endtime: formatDateText(now),
+                starttime: statsManager.startTime ? new Date(statsManager.startTime) : '',
+                endtime: now,
 
                 title: 'Report on ' + formatDateText(now),
                 report: $('#stats')[0].outerHTML,
