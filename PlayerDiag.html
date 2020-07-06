@@ -12,6 +12,7 @@
 
     <script src="lib/jquery/jquery.js"></script>
     <script src="lib/bootstrap/bootstrap.js"></script>
+    <!-- <script src="lib/moment/moment-with-locales.js"></script> -->
     <script src="PlayerDiagSetting.js"></script>
     <script src="PlayerDiagStats.js"></script>
 
@@ -585,8 +586,8 @@
                 ipaddress: statsManager.ipAddress,
                 useragent: encodeHTML(statsManager.userAgent),
                 streamurl: encodeHTML(statsManager.streamUrl),
-                starttime: statsManager.startTime ? new Date(statsManager.startTime) : '',
-                endtime: now,
+                starttime: statsManager.startTime ? (new Date(statsManager.startTime)).toString() : '',
+                endtime: now.toString(),
 
                 title: 'Report on ' + formatDateText(now),
                 report: $('#stats')[0].outerHTML,
@@ -615,6 +616,7 @@
 
         function timestampDownload(date) {
             return formatDate(date, true, false);
+            //return moment(date).format('YYYYMMDD_HHmmss');
         }
 
         function btnCsvStatusCode_onclick() {
@@ -682,12 +684,14 @@
         }
 
         function prefixUpload(date) {
-            let user = $('#userID').val().trim() || 'anonym';
+            let user = $('#userID').val().trim() || statsManager.ipAddress || 'anonym';
             return escapeFileName(user) + '/' + formatDate(date, false, false);
+            //return escapeFileName(user) + '/' + moment(date).format('YYYYMMDD');
         }
 
         function timestampUpload(date) {
             return formatDate(date, true, true);
+            //return moment(date).format('YYYYMMDD_HHmmss_SSS');
         }
 
         function uploadCsvStatusCode() {
