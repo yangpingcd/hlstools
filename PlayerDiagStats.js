@@ -47,7 +47,7 @@ class Stats {
 
     addStats(item) {
         this.statsItems.push(item);
-        while (this.statsItems.length > 10000) {
+        while (this.statsItems.length > 100000) {
             this.statsItems.shift();
         }
 
