@@ -226,11 +226,11 @@
 
                 let nowTime = new Date().getTime();
                 if (nowTime > nextUploadTime) {
-                    btnUploadNow_onclick();
+                    // set lastUploadTime first in case the uploading takes long time
                     lastUploadTime = nextUploadTime;
+                    btnUploadNow_onclick();
                 }
             }
-
         }
 
         function getStreamUrl() {
