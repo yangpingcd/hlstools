@@ -12,7 +12,7 @@
 
     <script src="lib/jquery/jquery.js"></script>
     <script src="lib/bootstrap/bootstrap.js"></script>
-    <!-- <script src="lib/moment/moment-with-locales.js"></script> -->
+    <script src="lib/moment/moment-with-locales.js"></script>
     <script src="PlayerDiagSetting.js"></script>
     <script src="PlayerDiagStats.js"></script>
 
@@ -113,6 +113,9 @@
 
         $(window).on('unload', function () {
             saveSettings();
+            if (statsManager.playing) {
+                uploadSummary();
+            }
         })
 
         function saveSettings() {
@@ -278,6 +281,7 @@
                 statsManager.playing = false;
 
                 btnUploadNow_onclick();
+                uploadSummary();
             }
         }
 
@@ -638,9 +642,85 @@
                 '</h' + 'tml>';
 
 
-            let pattern = Object.keys(mapObj).map(v => '\\${' + v + '}').join("|")
+            let pattern = Object.keys(mapObj).map(v => '\\${' + v + '}').join("|");
             let re = new RegExp(pattern, 'gi');
             return template.replace(re, matched => mapObj[matched.substr(2, matched.length - 3).toLowerCase()]);
+        }
+
+        function getSummary() {
+            let startTime = moment(statsManager.startTime);
+            let now = moment();
+
+            var cols = [];
+            cols.push(startTime.format('YYYY-MM-DD'), startTime.format('HH:mm:ss'));
+            cols.push(now.format("YYYY-MM-DD"), now.format('HH:mm:ss'));
+
+            let user = $('#userID').val().trim();
+            let isp = $('#isp').val().trim();
+            cols.push(escapeCSV(user), escapeCSV(isp));
+
+            cols.push(escapeCSV(statsManager.userAgent));
+            cols.push(escapeCSV(statsManager.streamUrl));
+
+            let statusCodeToCols = function (statsType) {
+                let cols = [0, 0, 0, 0, 0, 0, 0, 0, 0]; //0,200,300,400,500,Timeout,Sequential Timout,Errors,Sequential Errors 
+
+                let statusCodeHisto = statsManager.stats.getStatusCodeHistogram(statsType);
+                for (let key in statusCodeHisto) {
+                    let value = statusCodeHisto[key];
+
+                    if (key == 'Timeout') {
+                        cols[5] += value;
+                    } else if (key == 'Sequential Timout') {
+                        cols[6] += value;
+                    } else if (key == 'Error') {
+                        cols[7] += value;
+                    } else if (key == 'Sequential Error') {
+                        cols[8] += value;
+                    } else {
+                        let code = parseInt(key, 10);
+                        if (!isNaN(code)) {
+                            if (code <= 0) {
+                                cols[0] += value;
+                            } else if (code < 300) {
+                                cols[1] += value;
+                            } else if (code < 400) {
+                                cols[2] += value;
+                            } else if (code < 500) {
+                                cols[3] += value;
+                            } else {
+                                cols[4] += value;
+                            }
+                        }
+                    }
+                }
+                return cols;
+            }
+
+            let responseTimeToCols = function (statsType) {
+                let cols = [];
+
+                let responseTimeHisto = statsManager.stats.getResponseTimeHisto(statsType);
+                responseTimeHisto.forEach(item => {
+                    cols.push(item.value);
+                });
+
+                return cols;
+            }
+
+            cols.push(...statusCodeToCols());
+            cols.push(...responseTimeToCols());
+
+            cols.push(...statusCodeToCols(STATS_TYPE_PLAYLIST));
+            cols.push(...responseTimeToCols(STATS_TYPE_PLAYLIST));
+
+            cols.push(...statusCodeToCols(STATS_TYPE_CHUNKLIST));
+            cols.push(...responseTimeToCols(STATS_TYPE_CHUNKLIST));
+
+            cols.push(...statusCodeToCols(STATS_TYPE_CHUNK));
+            cols.push(...responseTimeToCols(STATS_TYPE_CHUNK));
+
+            return cols.join(',');
         }
 
         function timestampDownload(date) {
@@ -672,7 +752,7 @@
             downloadCsv(report, filename);
         }
 
-        function uploadAzure(fileName, requestData) {
+        function uploadAzure(fileName, requestData, append = false) {
             let baseUrl = getSASUri();
             if (!baseUrl) {
                 console.log("SAS URI is not set");
@@ -681,6 +761,9 @@
 
             let indexOfQueryStart = baseUrl.indexOf('?');
             let submitUri = baseUrl.substring(0, indexOfQueryStart) + '/' + fileName + baseUrl.substring(indexOfQueryStart);
+            if (append) {
+                submitUri += '&comp=appendblock';
+            }
             //console.log(submitUri);
 
             //let uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
@@ -692,7 +775,11 @@
                 data: requestData,
                 processData: false,
                 beforeSend: function (xhr) {
-                    xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
+                    if (append) {
+                        xhr.setRequestHeader('x-ms-blob-type', 'AppendBlob');
+                    } else {
+                        xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
+                    }
                     //xhr.setRequestHeader('Content-Length', requestData.length);
                 },
                 success: function (data, status) {
@@ -762,11 +849,19 @@
             uploadAzure(fileName, requestData);
         }
 
+        function uploadSummary() {
+            let summary = getSummary() + '\n';
+            let summaryData = new TextEncoder().encode(summary);
+
+            let fileName = "$summary/summary.csv"
+            uploadAzure(fileName, summaryData, true);
+        }
+
         function btnUploadNow_onclick() {
             uploadCsvStatusCode();
             uploadCsvResponseTime();
             uploadCsvAll();
-            uploadReport();
+            uploadReport();            
         }
     </script>
 </head>
